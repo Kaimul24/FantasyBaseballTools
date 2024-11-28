@@ -1,0 +1,13 @@
+# Directories
+fdp/
+djangotutorial/
+
+# Temporary files
+*.pyc
+*.pyo
+*.swp
+*.log
+
+# Text files
+*.txt
+*.json
