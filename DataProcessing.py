@@ -1,4 +1,5 @@
 from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
+import pandas as pd
 
 """
 DataProcessing module for processing and calculating fantasy points for baseball players.
@@ -14,7 +15,7 @@ Methods:
 Usage:
     This module can be run as a script to process and calculate fantasy points for batters, and save the results to text files.
 """
-import pandas as pd
+
 
 
 class DataProcessing:
