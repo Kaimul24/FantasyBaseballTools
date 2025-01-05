@@ -24,7 +24,6 @@ class FangraphsScraper:
 
     '''
 
-
     def __init__(self, position_category: PositionCategory): # In the future, add parameters to customize the URL such as season, qualified PA, pitchers, etc.
         self.positionCategory = position_category
         if position_category == PositionCategory.BATTER:
@@ -49,10 +48,15 @@ class FangraphsScraper:
         """
         response = requests.get(self.url)
         if response.status_code != 200:
-            return None
+            raise ValueError(f"Failed to fetch data: HTTP {response.status_code}")
+        
         tree = html.fromstring(response.text)
-        script_content = tree.xpath('//script[@id="__NEXT_DATA__"]/text()')
-        json_data = json.loads(script_content[0])
+
+        try:
+            script_content = tree.xpath('//script[@id="__NEXT_DATA__"]/text()')
+            json_data = json.loads(script_content[0])
+        except (IndexError, json.JSONDecodeError) as e:
+            raise ValueError("Failed to parse JSON data from the response") from e
 
         props = json_data.get("props", {})
         pageProps = props.get("pageProps", {})
@@ -63,7 +67,7 @@ class FangraphsScraper:
             relevant_query = queries[0]
         
         if not relevant_query:
-            return []
+            raise ValueError("No relevant query found in the JSON data")
          
         state = relevant_query.get("state", {})
         data = state.get("data", {})
@@ -88,7 +92,7 @@ if __name__ == "__main__":
     pd.set_option('display.max_colwidth', None)
     pd.set_option('display.width', None)
 
-    scraper = FangraphsScraper(PositionCategory.SP)
+    scraper = FangraphsScraper(PositionCategory.BATTER)
     df = scraper.get_data()
     with open("data.txt", "w") as f:
         print(df, file=f)

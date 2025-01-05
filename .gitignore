@@ -1,5 +1,5 @@
 # Directories
-fdp/
+fdp_venv/
 djangotutorial/
 
 # Temporary files
@@ -8,6 +8,6 @@ djangotutorial/
 *.swp
 *.log
 
-# Text files
+# Other files
 *.txt
 *.json
