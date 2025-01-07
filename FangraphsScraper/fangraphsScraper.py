@@ -27,7 +27,7 @@ class FangraphsScraper:
     def __init__(self, position_category: PositionCategory): # In the future, add parameters to customize the URL such as season, qualified PA, pitchers, etc.
         self.positionCategory = position_category
         if position_category == PositionCategory.BATTER:
-            self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&qual=1'
+            self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&qual=y'
         
         elif position_category == PositionCategory.SP:
             self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&stats=sta'
