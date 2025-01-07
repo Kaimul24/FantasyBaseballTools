@@ -1,5 +1,6 @@
 from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
 import pandas as pd
+import sklearn as sk
 
 """
 DataProcessing module for processing and calculating fantasy points for baseball players.
@@ -35,9 +36,9 @@ class DataProcessing:
         """
 
         if self.position_category == PositionCategory.BATTER:
-            columns = ['PlayerName', 'G', 'PA', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
+            columns = ['PlayerName', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
                        '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS',
-                       'xwOBA', 'xAVG', 'xSLG', 'BB/K', 'EV', 'LA', 'Barrel%', 'HardHit%']
+                       'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%']
             
             self.data = self.data[columns]
         elif self.position_category == PositionCategory.SP:
@@ -90,7 +91,7 @@ class DataProcessing:
                 pass
         points_df = pd.DataFrame(fantasy_points)
         self.data = pd.merge(self.data, points_df, on='PlayerName', how='left')
-        return self.data
+        
 
     
     
@@ -107,6 +108,6 @@ if __name__ == '__main__':
     with open("batter_data.txt", "w") as f:
         print(batters.data, file=f)
 
-    batter_points = batters.calc_fantasy_points()
+    batters.calc_fantasy_points()
     with open("batter_points.txt", "w") as f:
-        print(batter_points, file=f)
+        print(batters.data, file=f)
