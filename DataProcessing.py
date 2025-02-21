@@ -4,7 +4,7 @@ import sklearn as sk
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-
+from sklearn.impute import KNNImputer
 
 class DataProcessing:
     """
@@ -23,7 +23,11 @@ class DataProcessing:
     """
     def __init__(self, position_category: PositionCategory):
         self.position_category = position_category
-        self.data = FangraphsScraper(position_category, 2021, 2024).get_data()
+        # Fetch data in two ranges to exclude 2020
+        data_2019 = FangraphsScraper(position_category, 2019, 2019).get_data()
+        data_2021_2024 = FangraphsScraper(position_category, 2021, 2024).get_data()
+        # Combine the data
+        self.data = pd.concat([data_2019, data_2021_2024], ignore_index=True)
 
     def calc_plate_discipline_score(self):
         """Calculate plate discipline score using multiple PCA components."""
@@ -33,115 +37,159 @@ class DataProcessing:
         ]
         cols_to_invert = ['O-Swing%', 'SwStr%']
         
-        # Step 1: Scale the data
+        # Create a copy of the data for PCA
+        plate_disc_data = self.data[plate_discipline_columns].copy()
+        
+        # Scale the data
         scaler = StandardScaler()
-        self.data[plate_discipline_columns] = scaler.fit_transform(self.data[plate_discipline_columns])
+        plate_disc_data = pd.DataFrame(
+            scaler.fit_transform(plate_disc_data),
+            columns=plate_discipline_columns
+        )
         
-        # Step 2: Invert 'lower is better' stats
+        # Invert 'lower is better' stats
         for col in cols_to_invert:
-            self.data[col] = self.data[col] * -1  
+            plate_disc_data[col] = plate_disc_data[col] * -1
         
-        # Step 3: PCA with more components
-        pca = PCA(n_components=3)  # Let's capture the top 3 PCs for demonstration
-        X_pca = pca.fit_transform(self.data[plate_discipline_columns])
+        # PCA with more components
+        pca = PCA(n_components=3)
+        X_pca = pca.fit_transform(plate_disc_data)
         
-        # Extract PC1, PC2, PC3
-        PC1 = X_pca[:, 0]
-        PC2 = X_pca[:, 1]
-        PC3 = X_pca[:, 2]
+        # Calculate composite score
+        composite = 0.60 * X_pca[:, 0] + 0.40 * X_pca[:, 1] + 0.1 * X_pca[:, 2]
         
-        # # Inspect explained variance
-        # print("Explained variance ratio:", pca.explained_variance_ratio_)
-        # print("Cumulative variance explained:", np.cumsum(pca.explained_variance_ratio_))
-        
-        # # Inspect loadings for interpretability
-        # loadings = pca.components_
-        # for i, component in enumerate(loadings):
-        #     print(f"PC{i+1} loadings:")
-        #     for col_name, weight in zip(plate_discipline_columns, component):
-        #         print(f"  {col_name}: {weight:.4f}")
-        #     print()
-
-        # Step 4: Create a composite score
-        # Example: 70% weight on PC1, 30% on PC2, ignoring PC3 or weighting it lightly.
-        composite = 0.60 * PC1 + 0.40 * PC2 + 0.1 * PC3# You can adjust weights as you see fit
-
-        # Step 5: Normalize composite to a 0–100 range
+        # Normalize to 0-100
         composite_min, composite_max = composite.min(), composite.max()
         plate_disc_score = (composite - composite_min) / (composite_max - composite_min) * 100
-        self.data["PlateDisciplineScore"] = plate_disc_score
+        
+        # Concatenate new column with original dataframe
+        self.data = pd.concat([
+            self.data,
+            pd.Series(plate_disc_score, name='PlateDisciplineScore', index=self.data.index)
+        ], axis=1)
+
+    ### MAY NOT NEED
+    def transform_ages(self):
+        """Transform age data with polynomial features."""
+        # Calculate all age transformations at once
+        age_transforms = pd.DataFrame({
+            'log(Age-28)^2': self.data['Age'].apply(lambda x: np.log((abs(x - 28) + 1)**2)),
+            #'Age^3': self.data['Age'].apply(lambda x: x**3)
+        }, index=self.data.index)
+        
+        # Concatenate new columns and drop original Age column
+        self.data = pd.concat([
+            self.data.drop('Age', axis=1),
+            age_transforms
+        ], axis=1)
     
+    def reshape_data(self):
+        """Reshape data so each player has one row with columns grouped by year"""
+        # Get list of columns except PlayerName
+        feature_cols = [col for col in self.data.columns if col != 'PlayerName']
+        years = sorted(self.data['Year'].unique())
+        
+        # Create empty list to store reshaped data
+        reshaped_data = []
+        
+        # Group by player
+        for player, player_data in self.data.groupby('PlayerName'):
+            # Initialize player dict with name
+            player_dict = {'PlayerName': player}
+            
+            # For each year, add all stats
+            for year in years:
+                year_data = player_data[player_data['Year'] == year]
+                if not year_data.empty:
+                    row = year_data.iloc[0]
+                    # Add each stat with year prefix, maintaining year grouping
+                    year_stats = {
+                        f"{year}_stats": {
+                            col: row[col] for col in feature_cols if col != 'Year'
+                        }
+                    }
+                    # Flatten the year_stats dictionary with year prefix
+                    for col, value in year_stats[f"{year}_stats"].items():
+                        player_dict[f"{year}_{col}"] = value
+            
+            reshaped_data.append(player_dict)
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(reshaped_data)
+        
+        # Prepare data for KNN imputation
+        # First, separate PlayerName column
+        player_names = df['PlayerName']
+        
+        # Get numeric columns for imputation (exclude PlayerName)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        
+        # Initialize and fit KNNImputer
+        imputer = KNNImputer(n_neighbors=5, weights='distance')
+        
+        # Impute missing values
+        imputed_data = imputer.fit_transform(df[numeric_cols])
+        
+        # Create new DataFrame with imputed values
+        imputed_df = pd.DataFrame(imputed_data, columns=numeric_cols, index=df.index)
+        
+        # Reattach PlayerName column
+        imputed_df.insert(0, 'PlayerName', player_names)
+        
+        # Reorder columns to group by year
+        year_groups = []
+        for year in years:
+            year_cols = [col for col in imputed_df.columns if str(year) in col]
+            year_groups.extend(sorted(year_cols))
+        
+        # Final column order: PlayerName followed by year groups
+        final_cols = ['PlayerName'] + year_groups
+        self.data = imputed_df[final_cols]
+        return self.data
 
     def filter_data(self):
-        """
-        Filters the data based on the player's position category.
-        If the player's position category is BATTER, it selects specific columns related to batting statistics
-        and updates the data attribute with these columns.
-        Returns:
-            None
-        """
-
+        """Filter and reshape the data based on position category"""
         if self.position_category == PositionCategory.BATTER:
             self.calc_plate_discipline_score()
-
-            columns = ['PlayerName', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
-                       '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS',
-                       'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning']
+            
+            columns = ['PlayerName', 'Age', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
+                      '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%',
+                      'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning',
+                      'BABIP', 'Pull%', 'Cent%', 'Oppo%', 'BB/K', 'Offense']
             
             self.data = self.data[columns]
+            
+            # Reshape data after filtering columns
+            self.reshape_data()
 
-        elif self.position_category == PositionCategory.SP:
-            pass
-        elif self.position_category == PositionCategory.RP:
-            pass
-        return
-    
     def calc_fantasy_points(self):
-        """
-        Calculate fantasy points for each player in the dataset.
-        This method calculates fantasy points for players based on their performance
-        statistics and their position category. The points are calculated using the following formula
-        based on Yahoo Fantasy Baseball scoring:
-        - Single (1B): 2.6 points
-        - Double (2B): 5.2 points
-        - Triple (3B): 7.8 points
-        - Home Run (HR): 10.4 points
-        - Run (R): 1.9 points
-        - Run Batted In (RBI): 1.9 points
-        - Stolen Base (SB): 4.2 points
-        - Hit By Pitch (HBP): 2.6 points
-        The calculated points are stored in a new DataFrame which is then merged with
-        the original dataset.
-        Returns:
-            pd.DataFrame: The original dataset with an additional column for total fantasy points.
-        """
+        """Calculate fantasy points for each year"""
+        years = set([int(col.split('_')[0]) for col in self.data.columns if '_' in col])
+        
+        # Create dictionary to store fantasy points for each year
+        fantasy_points = {}
+        
+        for year in years:
+            year_str = str(year)
+            if all(f'{year_str}_{stat}' in self.data.columns for stat in ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'SB', 'HBP']):
+                fantasy_points[f'{year_str}_TotalPoints'] = (
+                    self.data[f'{year_str}_1B'] * 2.6 +
+                    self.data[f'{year_str}_2B'] * 5.2 +
+                    self.data[f'{year_str}_3B'] * 7.8 +
+                    self.data[f'{year_str}_HR'] * 10.4 +
+                    self.data[f'{year_str}_R'] * 1.9 +
+                    self.data[f'{year_str}_RBI'] * 1.9 +
+                    self.data[f'{year_str}_SB'] * 4.2 +
+                    self.data[f'{year_str}_HBP'] * 2.6
+                )
+        
+        # Concatenate all fantasy points columns at once
+        if fantasy_points:
+            self.data = pd.concat([
+                self.data,
+                pd.DataFrame(fantasy_points)
+            ], axis=1)
 
-        fantasy_points = []
-
-        for _, player in self.data.iterrows():
-            if self.position_category == PositionCategory.BATTER:
-                points = {
-                    'PlayerName': player['PlayerName'],
-                    'Year': player['Year'],  # Add Year to points dictionary
-                    'TotalPoints': (
-                        player['1B'] * 2.6 +
-                        player['2B'] * 5.2 + 
-                        player['3B'] * 7.8 +
-                        player['HR'] * 10.4 +
-                        player['R'] * 1.9 +
-                        player['RBI'] * 1.9 +
-                        player['SB'] * 4.2 +
-                        player['HBP'] * 2.6
-                    )
-                }
-                fantasy_points.append(points)
-            elif self.position_category == PositionCategory.SP:
-                pass
-            elif self.position_category == PositionCategory.RP:
-                pass
-        points_df = pd.DataFrame(fantasy_points)
-        self.data = pd.merge(self.data, points_df, on=['PlayerName', 'Year'], how='left')  # Merge on both PlayerName and Year
-    
 if __name__ == '__main__':
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
@@ -150,11 +198,8 @@ if __name__ == '__main__':
 
     batters = DataProcessing(PositionCategory.BATTER)
     batters.filter_data()
-    
-    with open("batter_data.txt", "w") as f:
-        print(batters.data, file=f)
-
-
     batters.calc_fantasy_points()
-    with open("batter_points.txt", "w") as f:
+
+    # Save reshaped data to file
+    with open("reshaped_batter_data.txt", "w") as f:
         print(batters.data, file=f)
