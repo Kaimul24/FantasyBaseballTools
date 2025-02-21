@@ -23,10 +23,8 @@ class DataProcessing:
     """
     def __init__(self, position_category: PositionCategory):
         self.position_category = position_category
-        # Fetch data in two ranges to exclude 2020
         data_2019 = FangraphsScraper(position_category, 2019, 2019).get_data()
         data_2021_2024 = FangraphsScraper(position_category, 2021, 2024).get_data()
-        # Combine the data
         self.data = pd.concat([data_2019, data_2021_2024], ignore_index=True)
 
     def calc_plate_discipline_score(self):

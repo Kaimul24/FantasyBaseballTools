@@ -5,7 +5,7 @@ import numpy as np
 from typing import List, TypedDict
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score  # Add this import at the top
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error  # Add MAE import
 
 ### EXCLUDE 2020
 
@@ -39,6 +39,7 @@ def create_rolling_datasets(df: pd.DataFrame) -> List[DatasetSplit]:
     
     # Remove 2020 if present
     years = [year for year in years if year != 2020]
+    print(years)
     
     # Create windows: each window needs 2 training years, 1 validation year, and 1 test year
     windows = []
@@ -175,14 +176,22 @@ def remove_year_prefixes(windows: List[WeightedDatasetSplit]) -> List[WeightedDa
 
 def train_model(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
     '''Train single XGBoost model and predict on validation data'''
-    non_valid_cols = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
-    
+    invalid_cols = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
+
     # Create single model instance
     model = xgb.XGBRegressor(
-        n_estimators=1000,
-        learning_rate=0.1,
         objective='reg:squarederror',
-        random_state=42
+        tree_method='hist',
+        n_estimators=430,
+        learning_rate=0.065,
+        max_depth=2,
+        min_child_weight=6,
+        subsample=0.75,
+        colsample_bytree=0.775,
+        gamma=0.0175,
+        reg_alpha=0.075,
+        reg_lambda=0.52,
+        random_state=42,
     )
     
     # Accumulate training data across windows
@@ -220,7 +229,7 @@ def train_model(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSpli
         val_year = window['val_year']
         
         # Get validation features (removing year prefix)
-        val_features = [col for col in val_data.columns if col != 'PlayerName' and col != 'TotalPoints' and col not in non_valid_cols]
+        val_features = [col for col in val_data.columns if col != 'PlayerName' and col != 'TotalPoints' and col not in invalid_cols]
         
         if not val_features:
             print(f"Skipping predictions for validation year {val_year}: no features found")
@@ -234,22 +243,22 @@ def train_model(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSpli
         window['model'] = model
         window['predictions'] = pd.DataFrame({
             'PlayerName': val_data['PlayerName'],
-            'predicted_weighted_TotalPoints': val_predictions,
-            'actual_weighted_TotalPoints': y_val.values
+            'predicted_TotalPoints': val_predictions,
+            'actual_TotalPoints': y_val.values
         })
     
     return windows
 
 def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     """
-    Calculate RMSE and R² score for predictions
+    Calculate RMSE, MAE, and R² score for predictions
     
     Args:
         y_true: Array of actual values
         y_pred: Array of predicted values
     
     Returns:
-        Dictionary containing RMSE and R² score
+        Dictionary containing RMSE, MAE, and R² score
     """
     # Ensure inputs are numpy arrays
     y_true = np.array(y_true)
@@ -263,10 +272,12 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     
     # Calculate metrics
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     
     return {
         'rmse': rmse,
+        'mae': mae,
         'r2': r2
     }
 
@@ -344,37 +355,41 @@ def main():
             
             # Calculate metrics
             metrics = calculate_metrics(
-                predictions['actual_weighted_TotalPoints'],
-                predictions['predicted_weighted_TotalPoints']
+                predictions['actual_TotalPoints'],
+                predictions['predicted_TotalPoints']
             )
             all_metrics.append(metrics)
             
             # Write metrics
             f.write("\nValidation Metrics:\n")
             f.write(f"RMSE: {metrics['rmse']:.2f}\n")
+            f.write(f"MAE: {metrics['mae']:.2f}\n")
             f.write(f"R² Score: {metrics['r2']:.3f}\n\n")
             
             # Compute and write predictions
             predictions["percent_diff"] = predictions.apply(
-                lambda row: abs(row["predicted_weighted_TotalPoints"] - row["actual_weighted_TotalPoints"]) / row["actual_weighted_TotalPoints"] * 100
-                            if row["actual_weighted_TotalPoints"] != 0 else 0, axis=1)
+                lambda row: abs(row["predicted_TotalPoints"] - row["actual_TotalPoints"]) / row["actual_TotalPoints"] * 100
+                            if row["actual_TotalPoints"] != 0 else 0, axis=1)
             
             f.write(f"{'PlayerName':<20}{'Predicted':>15}{'Actual':>15}{'Percent Diff (%)':>20}\n")
             f.write("-" * 70 + "\n")
             
             for _, row in predictions.iterrows():
-                f.write(f"{row['PlayerName']:<20}{row['predicted_weighted_TotalPoints']:>15.2f}"
-                        f"{row['actual_weighted_TotalPoints']:>15.2f}{row['percent_diff']:>20.2f}\n")
+                f.write(f"{row['PlayerName']:<20}{row['predicted_TotalPoints']:>15.2f}"
+                        f"{row['actual_TotalPoints']:>15.2f}{row['percent_diff']:>20.2f}\n")
             f.write("\n" + "=" * 80 + "\n\n")
         
         # Write average metrics across all windows
         if all_metrics:
             avg_rmse = np.mean([m['rmse'] for m in all_metrics])
+            avg_mae = np.mean([m['mae'] for m in all_metrics])
             avg_r2 = np.mean([m['r2'] for m in all_metrics])
             f.write("\nOverall Model Performance:\n")
             f.write(f"Average RMSE: {avg_rmse:.2f}\n")
+            f.write(f"Average MAE: {avg_mae:.2f}\n")
             f.write(f"Average R² Score: {avg_r2:.3f}\n")
             f.write("=" * 80 + "\n")
+            print(f"Overall Model Performance: \n\tAverage RMSE: {avg_rmse:.2f} \n\tAverage MAE: {avg_mae:.2f} \n\tAverage R² Score: {avg_r2:.3f}")
 
 if __name__ == "__main__":
     main()
