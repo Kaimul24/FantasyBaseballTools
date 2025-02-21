@@ -23,26 +23,14 @@ class FangraphsScraper:
         Retrieves the statistics data and returns it as a pandas DataFrame.
 
     '''
-
-    # def __init__(self, position_category: PositionCategory): # In the future, add parameters to customize the URL such as season, qualified PA, pitchers, etc.
-    #     self.positionCategory = position_category
-    #     if position_category == PositionCategory.BATTER:
-    #         self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&qual=y'
-        
-    #     elif position_category == PositionCategory.SP:
-    #         self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&stats=sta'
-
-    #     elif position_category == PositionCategory.RP:
-    #         self.url = 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season=2024&month=0&season1=2024&ind=0&pageitems=2000000000&stats=rel'
-    #     else:
-    #         raise ValueError("Invalid Position Category")
     def __init__(self, position_category: PositionCategory, start_year: int = 2024, end_year: int = 2024):
         self.positionCategory = position_category
         self.start_year = start_year
         self.end_year = end_year
-        
+
+        ## QUAL TO BE CHANGED
         self.base_urls = {
-            PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=y',
+            PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=100',
             PositionCategory.SP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&stats=sta',
             PositionCategory.RP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&stats=rel'
         }
@@ -62,7 +50,7 @@ class FangraphsScraper:
         self.url = self.base_urls[self.positionCategory].format(year, year)
         response = requests.get(self.url)
         if response.status_code != 200:
-            raise ValueError(f"Failed to fetch data: HTTP {response.status_code}")
+            return []  # Return empty list instead of raising exception
         
         tree = html.fromstring(response.text)
 
@@ -93,12 +81,7 @@ class FangraphsScraper:
     Returns:
         pandas.DataFrame: A DataFrame containing the statistical data.
     """
-    # def get_data(self) -> pd.DataFrame:
-    #     stats_data = self._get_page()
-    #     if not stats_data:
-    #         raise ValueError("No data found, check the URL.")
-    #     df = pd.DataFrame(stats_data)
-    #     return df
+
     def get_data(self) -> pd.DataFrame:
         all_data = []
         for year in range(self.start_year, self.end_year + 1):
@@ -127,7 +110,7 @@ if __name__ == "__main__":
     pd.set_option('display.max_colwidth', None)
     pd.set_option('display.width', None)
 
-    scraper = FangraphsScraper(PositionCategory.BATTER, 2022, 2024)
-    df = scraper.get_data()
-    with open("data.txt", "w") as f:
+    scraper = FangraphsScraper(PositionCategory.BATTER, 2024, 2024)    
+    df = scraper.get_data()    
+    with open("data.txt", "w") as f:        
         print(df, file=f)
