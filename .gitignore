@@ -11,3 +11,5 @@ djangotutorial/
 # Other files
 *.txt
 *.json
+*.csv
+*.png

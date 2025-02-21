@@ -16,7 +16,7 @@ def test_get_page_no_respone(mock_get, scraper):
     mock_response = requests.Response()
     mock_response.status_code = 404
     mock_get.return_value = mock_response
-    stats = scraper._get_page()
+    stats = scraper._get_page(2024)
     assert(not stats)
 
 
@@ -33,7 +33,7 @@ def test_get_page(mock_get, scraper):
     '''
     mock_get.return_value = mock_response
 
-    stats = scraper._get_page()
+    stats = scraper._get_page(2024)
     assert len(stats) == 1
     assert stats[0]['player'] == 'Player1'
     assert stats[0]['stat'] == 'Stat1'
