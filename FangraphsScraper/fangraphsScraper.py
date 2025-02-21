@@ -28,6 +28,8 @@ class FangraphsScraper:
         self.start_year = start_year
         self.end_year = end_year
 
+        
+
         ## QUAL TO BE CHANGED
         self.base_urls = {
             PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=100',

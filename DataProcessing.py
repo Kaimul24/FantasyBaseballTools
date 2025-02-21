@@ -156,6 +156,7 @@ class DataProcessing:
                       '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%',
                       'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning',
                       'BABIP', 'Pull%', 'Cent%', 'Oppo%', 'BB/K', 'Offense']
+
             
             self.data = self.data[columns]
             
