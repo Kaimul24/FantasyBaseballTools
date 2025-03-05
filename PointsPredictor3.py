@@ -1,25 +1,10 @@
-from DataProcessing import DataProcessing
+from DataProcessing import DataProcessing, WeightedDatasetSplit
 from FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
 import numpy as np
-from typing import List, TypedDict
+from typing import List
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error  # Add MAE import
-
-### EXCLUDE 2020
-
-class DatasetSplit(TypedDict):
-    train_years: List[int]
-    val_year: int
-    test_year: int
-    train_data: pd.DataFrame
-    val_data: pd.DataFrame
-    test_data: pd.DataFrame
-
-class WeightedDatasetSplit(DatasetSplit):
-    weighted_data: pd.DataFrame
-
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 def load_data() -> pd.DataFrame:
     """Load initial data"""
@@ -28,155 +13,8 @@ def load_data() -> pd.DataFrame:
     df.calc_fantasy_points()
     return df.data 
 
-def create_rolling_datasets(df: pd.DataFrame) -> List[DatasetSplit]:
-    """Create rolling train/validation/test splits"""
-    # Get all years from column names and sort them
-    years = sorted(list(set(
-        int(col.split('_')[0]) 
-        for col in df.columns 
-        if '_' in col and col.split('_')[0].isdigit()
-    )))
-    
-    # Remove 2020 if present
-    years = [year for year in years if year != 2020]
-    print(years)
-    
-    # Create windows: each window needs 2 training years, 1 validation year, and 1 test year
-    windows = []
-    for i in range(len(years) - 3):  # -3 because we need 4 years for each window
-        window = {
-            'train_years': [years[i], years[i+1]],
-            'val_year': years[i+2],               
-            'test_year': years[i+3]  
-        }
-        windows.append(window)
-    
-    datasets = []
-    
-    for window in windows:
-        train_years = window['train_years']
-        val_year = window['val_year']
-        test_year = window['test_year']
-        
-        # Get columns for each set
-        train_cols = [col for col in df.columns if any(str(year) in col for year in train_years)]
-        val_cols = [col for col in df.columns if str(val_year) in col]
-        test_cols = [col for col in df.columns if str(test_year) in col]
-        
-        if test_cols:  # Only create dataset if test year exists
-            dataset = {
-                'train_years': train_years,
-                'val_year': val_year,
-                'test_year': test_year,
-                'train_data': df[['PlayerName'] + train_cols].copy(),
-                'val_data': df[['PlayerName'] + val_cols].copy(),
-                'test_data': df[['PlayerName'] + test_cols].copy()
-            }
-            datasets.append(dataset)
-    
-    return datasets
-
-def concat_training_windows(datasets: List[DatasetSplit]) -> List[WeightedDatasetSplit]:
-    """
-    Process each training window separately applying weights to years.
-    For 2 years: 60% recent year, 40% older year
-    Returns list of processed training windows.
-    """
-    processed_windows = []
-    
-    for dataset in datasets:
-        train_data = dataset['train_data'].copy()
-        train_years = sorted(dataset['train_years'])
-        
-        weighted_data = pd.DataFrame({'PlayerName': train_data['PlayerName'].unique()})
-        
-        year_prefix = f"{train_years[-1]}_"
-        base_stats = [col.replace(year_prefix, '') for col in train_data.columns 
-                     if year_prefix in col]
-        
-        for stat in base_stats:
-            year2_col = f"{train_years[1]}_{stat}"  # More recent year
-            year1_col = f"{train_years[0]}_{stat}"  # Older year
-            
-            stat_data = pd.DataFrame()
-            for year_col in [year1_col, year2_col]:
-                if year_col in train_data.columns:
-                    year_stats = train_data[['PlayerName', year_col]].copy()
-                    stat_data = pd.merge(stat_data, year_stats, on='PlayerName', how='outer') if not stat_data.empty else year_stats
-
-            weighted_stat = pd.Series(0, index=stat_data.index)
-            
-            # Set weights: 60% recent year, 40% older year
-            weights = {year2_col: 0.6, year1_col: 0.4}
-            
-            # Apply weights
-            for year_col, weight in weights.items():
-                if year_col in stat_data.columns:
-                    weighted_stat += stat_data[year_col].fillna(0) * weight
-                
-            weighted_data[stat] = weighted_stat
-        
-        processed_windows.append({
-            'train_years': train_years,
-            'val_year': dataset['val_year'],
-            'test_year': dataset['test_year'],
-            'weighted_data': weighted_data,
-            'train_data': train_data,  # Keep original training data for reference
-            'val_data': dataset['val_data'],
-            'test_data': dataset['test_data'],
-        })
-    
-    return processed_windows
-
-def remove_stats(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-    '''Remove total points and counting stats from training data'''
-    for window in windows:
-        weighted_data = window['weighted_data']
-        cols_to_drop = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 
-                        'HBP', 'SB']
-
-        weighted_data = weighted_data.drop(cols_to_drop, axis=1)
-        window['weighted_data'] = weighted_data
-
-    return windows
-
-def remove_year_prefixes(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-    '''Remove year prefixes from validation and test data columns'''
-    for window in windows:
-        # Handle validation data
-        val_year = str(window['val_year'])
-        val_cols = window['val_data'].columns
-        val_rename = {
-            col: col.replace(f"{val_year}_", "") 
-            for col in val_cols 
-            if col.startswith(f"{val_year}_")
-        }
-        window['val_data'] = window['val_data'].rename(columns=val_rename)
-        
-        # Handle test data
-        test_year = str(window['test_year'])
-        test_cols = window['test_data'].columns
-        test_rename = {
-            col: col.replace(f"{test_year}_", "") 
-            for col in test_cols 
-            if col.startswith(f"{test_year}_")
-        }
-        window['test_data'] = window['test_data'].rename(columns=test_rename)
-        
-        # Also remove 'weighted_' prefix from weighted_data
-        weighted_cols = window['weighted_data'].columns
-        weighted_rename = {
-            col: col.replace("weighted_", "") 
-            for col in weighted_cols 
-            if col.startswith("weighted_") and col != "PlayerName"
-        }
-        window['weighted_data'] = window['weighted_data'].rename(columns=weighted_rename)
-    
-    return windows
-
-def train_model(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
+def train_model(windows: List[WeightedDatasetSplit]) -> xgb.XGBRegressor:
     '''Train single XGBoost model and predict on validation data'''
-    invalid_cols = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
 
     # Create single model instance
     model = xgb.XGBRegressor(
@@ -223,26 +61,30 @@ def train_model(windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSpli
     
     model.fit(X_full, y_full, verbose=False)
     
-    # Make predictions on validation data for each window
+    return model
+
+def predict_model(model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
+    # Make predictions on test data for each window
+    invalid_cols = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
     for window in windows:
-        val_data = window['val_data']
-        val_year = window['val_year']
+        test_data = window['test_data']
+        test_year = window['test_year']
         
         # Get validation features (removing year prefix)
-        val_features = [col for col in val_data.columns if col != 'PlayerName' and col != 'TotalPoints' and col not in invalid_cols]
+        val_features = [col for col in test_data.columns if col != 'PlayerName' and col != 'TotalPoints' and col not in invalid_cols]
         
         if not val_features:
-            print(f"Skipping predictions for validation year {val_year}: no features found")
+            print(f"Skipping predictions for validation year {test_year}: no features found")
             continue
             
-        X_val = val_data[val_features]
-        y_val = val_data["TotalPoints"]
+        X_val = test_data[val_features]
+        y_val = test_data["TotalPoints"]
         
         val_predictions = model.predict(X_val)
         
         window['model'] = model
         window['predictions'] = pd.DataFrame({
-            'PlayerName': val_data['PlayerName'],
+            'PlayerName': test_data['PlayerName'],
             'predicted_TotalPoints': val_predictions,
             'actual_TotalPoints': y_val.values
         })
@@ -284,73 +126,49 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 def main():
     # Load data
     print("Loading data...\n")
-    df = load_data()
+    data_processor = DataProcessing(PositionCategory.BATTER)
+    data_processor.filter_data()
+    data_processor.calc_fantasy_points()
     
-    # Create rolling datasets
-    print("Creating datasets...\n")
-    datasets = create_rolling_datasets(df)
-    print(f"Number of datasets: {len(datasets)}\n")
-
-    # Get processed training windows
-    print("Processing training windows...\n")
-    processed_windows = concat_training_windows(datasets)
-
-    '''
-    Each window has the following keys:
-        window['train_years']
-        window['val_year']
-        window['test_year']
-        window['weighted_data']
-        window['train_data']
-        window['val_data']
-        window['test_data']
-    '''
-
-    # Remove year prefixes
-    print("Removing year prefixes...\n")
-    processed_windows = remove_year_prefixes(processed_windows)
-
-    # Remove counting stats from training data
-    print("Removing counting stats from training data...\n")
-    processed_windows = remove_stats(processed_windows)
+    # Use the data processor to prepare windows
+    processed_windows = data_processor.prepare_data_for_modeling()
 
     #  Print all data to file
-    with open('all_data.txt', 'w') as f:
+    with open('all_data_on_test.txt', 'w') as f:
         for i, window in enumerate(processed_windows):
             f.write(f"\n{'='*80}\n")
             f.write(f"Window {i+1}:\n")
             f.write(f"Training years: {window['train_years']}\n")
-            f.write(f"Validation year: {window['val_year']}\n")
             f.write(f"Test year: {window['test_year']}\n")
             
             f.write("\nWeighted Training Data:\n")
             f.write(f"Shape: {window['weighted_data'].shape}\n")
             f.write(window['weighted_data'].to_string())
             
-            f.write("\n\nValidation Data:\n")
-            f.write(f"Shape: {window['val_data'].shape}\n")
-            f.write(window['val_data'].to_string())
-            
             f.write("\n\nTest Data:\n")
             f.write(f"Shape: {window['test_data'].shape}\n")
             f.write(window['test_data'].to_string())
             f.write(f"\n{'='*80}\n")
 
-    # Train model for each window
+    # Train model
     print("Training models...\n")
-    trained_windows = train_model(processed_windows)
+    model = train_model(processed_windows)
 
-    with open("predictions.txt", "w") as f:
+    # Make predictions for each window
+    print("Making predictions...\n")
+    tested_windows = predict_model(model, processed_windows)
+
+    with open("predictions_on_test2.txt", "w") as f:
         # Track overall metrics
         all_metrics = []
         
-        for i, window in enumerate(trained_windows):
+        for i, window in enumerate(tested_windows):
             if "predictions" not in window:
                 f.write(f"Window {i+1}: No predictions available.\n")
                 continue
             
             f.write(f"Window {i+1}:\n")
-            f.write(f"Training years: {window['train_years']}, Validation year: {window['val_year']}, Test year: {window['test_year']}\n")
+            f.write(f"Training years: {window['train_years']}, Test year: {window['test_year']}\n")
             predictions = window["predictions"].copy()
             
             # Calculate metrics
@@ -361,7 +179,7 @@ def main():
             all_metrics.append(metrics)
             
             # Write metrics
-            f.write("\nValidation Metrics:\n")
+            f.write("\nTest Metrics:\n")
             f.write(f"RMSE: {metrics['rmse']:.2f}\n")
             f.write(f"MAE: {metrics['mae']:.2f}\n")
             f.write(f"R² Score: {metrics['r2']:.3f}\n\n")
