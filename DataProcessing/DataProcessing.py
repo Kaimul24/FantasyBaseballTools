@@ -1,96 +1,51 @@
+from abc import ABC, abstractmethod
 from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 from sklearn.impute import KNNImputer
 from typing import List, TypedDict
 
 class DatasetSplit(TypedDict):
     train_years: List[int]
-    val_year: int
     test_year: int
     train_data: pd.DataFrame
-    val_data: pd.DataFrame
     test_data: pd.DataFrame
 
 class WeightedDatasetSplit(DatasetSplit):
     weighted_data: pd.DataFrame
 
-class DataProcessing:
+class PredictionDataset(TypedDict):
+    train_years: List[int]
+    prediction_year: int
+    train_data: pd.DataFrame
+
+class DataProcessing(ABC):
     """
-    DataProcessing module for processing and calculating fantasy points for baseball players.
-    Classes:
-        DataProcessing: A class to process and calculate fantasy points for players based on their position category.
-    Methods:
-        __init__(self, position_category: PositionCategory):
-            Initializes the DataProcessing class with the given position category and retrieves data using FangraphsScraper.
-        filter_data(self):
-            Filters the data based on the position category. Currently, it filters columns for batters.
-        calc_fantasy_points(self):
-            Calculates fantasy points for players based on their performance metrics and position category. Returns the updated dataframe with fantasy points.
-    Usage:
-        This module can be run as a script to process and calculate fantasy points for batters, and save the results to text files.
+    Abstract Base Class for processing and calculating fantasy points for baseball players.
+    
+    This class handles common data processing functions and defines abstract methods
+    that should be implemented by position-specific subclasses.
     """
     def __init__(self, position_category: PositionCategory, start_year: int = 2019, end_year: int = 2024):
         self.position_category = position_category
         data = FangraphsScraper(position_category, start_year=start_year, end_year=end_year).get_data()
         self.data = data[data['Year'] != 2020]
         self.years = sorted(self.data['Year'].unique())
+    
+    @abstractmethod
+    def filter_data(self):
+        """Filter and reshape the data based on position category"""
+        pass
 
-    def calc_plate_discipline_score(self):
-        """Calculate plate discipline score using multiple PCA components."""
-        plate_discipline_columns = [
-            'O-Swing%', 'Z-Swing%', 'Swing%', 'O-Contact%', 
-            'Z-Contact%', 'Contact%', 'Zone%', 'F-Strike%', 'SwStr%'
-        ]
-        cols_to_invert = ['O-Swing%', 'SwStr%']
-        
-        # Create a copy of the data for PCA
-        plate_disc_data = self.data[plate_discipline_columns].copy()
-        
-        # Scale the data
-        scaler = StandardScaler()
-        plate_disc_data = pd.DataFrame(
-            scaler.fit_transform(plate_disc_data),
-            columns=plate_discipline_columns
-        )
-        
-        # Invert 'lower is better' stats
-        for col in cols_to_invert:
-            plate_disc_data[col] = plate_disc_data[col] * -1
-        
-        # PCA with more components
-        pca = PCA(n_components=3)
-        X_pca = pca.fit_transform(plate_disc_data)
-        
-        # Calculate composite score
-        composite = 0.60 * X_pca[:, 0] + 0.40 * X_pca[:, 1] + 0.1 * X_pca[:, 2]
-        
-        # Normalize to 0-100
-        composite_min, composite_max = composite.min(), composite.max()
-        plate_disc_score = (composite - composite_min) / (composite_max - composite_min) * 100
-        
-        # Concatenate new column with original dataframe
-        self.data = pd.concat([
-            self.data,
-            pd.Series(plate_disc_score, name='PlateDisciplineScore', index=self.data.index)
-        ], axis=1)
+    @abstractmethod
+    def calc_fantasy_points(self):
+        """Calculate fantasy points for each year"""
+        pass
 
-    ### MAY NOT NEED
-    def transform_ages(self):
-        """Transform age data with polynomial features."""
-        # Calculate all age transformations at once
-        age_transforms = pd.DataFrame({
-            'log(Age-28)^2': self.data['Age'].apply(lambda x: np.log((abs(x - 28) + 1)**2)),
-            #'Age^3': self.data['Age'].apply(lambda x: x**3)
-        }, index=self.data.index)
-        
-        # Concatenate new columns and drop original Age column
-        self.data = pd.concat([
-            self.data.drop('Age', axis=1),
-            age_transforms
-        ], axis=1)
+    @abstractmethod
+    def get_counting_stats(self) -> List[str]:
+        """Return a list of counting stats to remove for this position category"""
+        pass
     
     def reshape_data(self):
         """Reshape data so each player has one row with columns grouped by year"""
@@ -155,48 +110,6 @@ class DataProcessing:
         self.data = imputed_df[final_cols]
         return self.data
 
-    def filter_data(self):
-        """Filter and reshape the data based on position category"""
-        if self.position_category == PositionCategory.BATTER:
-            self.calc_plate_discipline_score()
-            
-            columns = ['PlayerName', 'Age', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
-                      '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%',
-                      'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning',
-                      'BABIP', 'Pull%', 'Cent%', 'Oppo%', 'BB/K', 'Offense']
-
-            self.data = self.data[columns]
-            
-            # Reshape data after filtering columns
-            self.reshape_data()
-
-    def calc_fantasy_points(self):
-        """Calculate fantasy points for each year"""
-        
-        # Create dictionary to store fantasy points for each year
-        fantasy_points = {}
-        
-        for year in self.years:
-            year_str = str(year)
-            if all(f'{year_str}_{stat}' in self.data.columns for stat in ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'SB', 'HBP']):
-                fantasy_points[f'{year_str}_TotalPoints'] = (
-                    self.data[f'{year_str}_1B'] * 2.6 +
-                    self.data[f'{year_str}_2B'] * 5.2 +
-                    self.data[f'{year_str}_3B'] * 7.8 +
-                    self.data[f'{year_str}_HR'] * 10.4 +
-                    self.data[f'{year_str}_R'] * 1.9 +
-                    self.data[f'{year_str}_RBI'] * 1.9 +
-                    self.data[f'{year_str}_SB'] * 4.2 +
-                    self.data[f'{year_str}_HBP'] * 2.6
-                )
-        
-        # Concatenate all fantasy points columns at once
-        if fantasy_points:
-            self.data = pd.concat([
-                self.data,
-                pd.DataFrame(fantasy_points)
-            ], axis=1)
-
     def create_rolling_datasets(self) -> List[DatasetSplit]:
         """Create rolling train/validation/test splits"""
         # Get all years from column names and sort them
@@ -208,7 +121,6 @@ class DataProcessing:
         
         # Remove 2020 if present
         years = [year for year in years if year != 2020]
-        print(years)
         
         # Create windows: each window needs 2 training years, 1 validation year, and 1 test year
         windows = []
@@ -271,7 +183,7 @@ class DataProcessing:
 
                 weighted_stat = pd.Series(0, index=stat_data.index)
                 
-                # Set weights: 60% recent year, 40% older year
+                # Set weights: 50% recent year, 30% middle year, 20% oldest year
                 weights = {year3_col: 0.5, year2_col: 0.3, year1_col: 0.2}
                 
                 # Apply weights
@@ -292,13 +204,16 @@ class DataProcessing:
         return processed_windows
 
     def remove_stats(self, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        '''Remove total points and counting stats from training data'''
+        '''Remove counting stats from training data'''
         for window in windows:
             weighted_data = window['weighted_data']
-            cols_to_drop = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 
-                            'HBP', 'SB']
+            # Get counting stats to drop from concrete class implementation
+            cols_to_drop = self.get_counting_stats()
 
-            weighted_data = weighted_data.drop(cols_to_drop, axis=1)
+            # Drop only columns that actually exist
+            cols_to_drop = [col for col in cols_to_drop if col in weighted_data.columns]
+            if cols_to_drop:
+                weighted_data = weighted_data.drop(cols_to_drop, axis=1)
             window['weighted_data'] = weighted_data
 
         return windows
@@ -328,36 +243,38 @@ class DataProcessing:
         
         return windows
 
-    def prepare_data_for_modeling(self) -> List[WeightedDatasetSplit]:
-        """
-        Prepare data for modeling by creating datasets, applying weights, and preprocessing.
-        Returns a list of preprocessed training windows ready for model training.
-        """
-        # Create rolling datasets
-        print("Creating datasets...\n")
-        datasets = self.create_rolling_datasets()
-        print(f"Number of datasets: {len(datasets)}\n")
+#     def prepare_data_for_modeling(self) -> List[WeightedDatasetSplit]:
+#         """
+#         Prepare data for modeling by creating datasets, applying weights, and preprocessing.
+#         Returns a list of preprocessed training windows ready for model training.
+#         """
+#         # Create rolling datasets
+#         print("Creating datasets...\n")
+#         datasets = self.create_rolling_datasets()
+#         print(f"Number of datasets: {len(datasets)}\n")
 
-        # Get processed training windows
-        print("Processing training windows...\n")
-        processed_windows = self.concat_training_windows(datasets)
+#         # Get processed training windows
+#         print("Processing training windows...\n")
+#         processed_windows = self.concat_training_windows(datasets)
 
-        # Remove year prefixes
-        print("Removing year prefixes...\n")
-        processed_windows = self.remove_year_prefixes(processed_windows)
+#         # Remove year prefixes
+#         print("Removing year prefixes...\n")
+#         processed_windows = self.remove_year_prefixes(processed_windows)
 
-        # Remove counting stats from training data
-        print("Removing counting stats from training data...\n")
-        processed_windows = self.remove_stats(processed_windows)
+#         # Remove counting stats from training data
+#         print("Removing counting stats from training data...\n")
+#         processed_windows = self.remove_stats(processed_windows)
         
-        return processed_windows
+#         return processed_windows
 
-if __name__ == '__main__':
-    batters = DataProcessing(PositionCategory.BATTER)
-    batters.filter_data()
-    batters.calc_fantasy_points()
-
-    # Save reshaped data to file
-    with open("reshaped_batter_data.txt", "w") as f:
-        f.write(batters.data.to_string())
+# if __name__ == '__main__':
+#     # Example usage with batters
+#     print("Processing batter data...")
+#     batters = BatterDataProcessing()
+#     batters.filter_data()
+#     batters.calc_fantasy_points()
+    
+#     # Save reshaped data to file
+#     with open("reshaped_batter_data.txt", "w") as f:
+#         f.write(batters.data.to_string())
 

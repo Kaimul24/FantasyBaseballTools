@@ -1,6 +1,11 @@
 # Directories
 fdp_venv/
 djangotutorial/
+old_points_predictors/
+models/
+__pycache__/
+.[!.]*/
+
 
 # Temporary files
 *.pyc

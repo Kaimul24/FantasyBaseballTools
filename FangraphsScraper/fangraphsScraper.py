@@ -112,7 +112,11 @@ if __name__ == "__main__":
     pd.set_option('display.max_colwidth', None)
     pd.set_option('display.width', None)
 
-    scraper = FangraphsScraper(PositionCategory.BATTER, 2024, 2024)    
+    scraper = FangraphsScraper(PositionCategory.SP, 2024, 2024)    
     df = scraper.get_data()    
-    with open("data.txt", "w") as f:        
-        print(df, file=f)
+    # with open("SP.txt", "w") as f:        
+    #     print(list(df.columns), file=f)
+
+    for col in ['SV', 'HLD', 'K', 'ER', 'BB', 'H', 'HBP', 'IP']:
+        if col not in list(df.columns):
+            print(f"Column {col} not found")
