@@ -1,6 +1,15 @@
 # Directories
 fdp_venv/
 djangotutorial/
+old_points_predictors/
+models/
+__pycache__/
+.[!.]*/
+training_results/
+player_data/
+
+
+
 
 # Temporary files
 *.pyc
@@ -13,3 +22,4 @@ djangotutorial/
 *.json
 *.csv
 *.png
+.DS_Store
