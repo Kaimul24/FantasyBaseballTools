@@ -3,11 +3,14 @@ import json
 import requests
 import pandas as pd
 from enum import Enum
+import os
 
+data_dir = "player_data"
+os.makedirs(data_dir, exist_ok=True)
 class PositionCategory(Enum):
-    BATTER = 'Batter'
-    SP = 'SP'
-    RP = 'RP'
+    BATTER = 1
+    SP = 2
+    RP = 3
  
 class FangraphsScraper:
     '''
@@ -33,9 +36,9 @@ class FangraphsScraper:
         ## QUAL TO BE CHANGED
         self.base_urls = {
             PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=100',
-            PositionCategory.SP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&stats=sta',
-            PositionCategory.RP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&qual=y&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&stats=rel'
-        }
+            PositionCategory.SP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&type=5&season={}&month=0&season1={}&ind=0&stats=sta&qual=60&pagenum=1&pageitems=2000000000',
+            PositionCategory.RP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&type=8&season={}&month=0&season1={}&ind=0&qual=20&pageitems=2000000000&stats=rel'
+        } 
         
         if position_category not in self.base_urls:
             raise ValueError("Invalid Position Category")
@@ -49,6 +52,7 @@ class FangraphsScraper:
             list: A list of statistical data extracted from the page. If no relevant
                   data is found, an empty list is returned.
         """
+
         self.url = self.base_urls[self.positionCategory].format(year, year)
         response = requests.get(self.url)
         if response.status_code != 200:
@@ -67,8 +71,7 @@ class FangraphsScraper:
         dehydratedState = pageProps.get("dehydratedState", {})
         queries = dehydratedState.get("queries", [])
 
-        if queries:
-            relevant_query = queries[0]
+        relevant_query = queries[0] if queries else None
         
         if not relevant_query:
             raise ValueError("No relevant query found in the JSON data")
@@ -85,8 +88,18 @@ class FangraphsScraper:
     """
 
     def get_data(self) -> pd.DataFrame:
+        all_years_file_path = os.path.join(data_dir, f"{str(self.positionCategory)[17:]}_{self.start_year}_{self.end_year}.pkl")
+        if os.path.exists(all_years_file_path):
+            return pd.read_pickle(all_years_file_path)
+        
         all_data = []
         for year in range(self.start_year, self.end_year + 1):
+            single_year_path = os.path.join(data_dir, f"{str(self.positionCategory)[17:]}_{year}.pkl")
+            if os.path.exists(single_year_path):
+                df = pd.read_pickle(single_year_path)
+                all_data.append(df)
+                continue
+
             stats_data = self._get_page(year)
             if stats_data:
                 df = pd.DataFrame(stats_data)
@@ -96,6 +109,7 @@ class FangraphsScraper:
                 # Remove empty columns
                 df = df.loc[:, df.notna().any()]
                 all_data.append(df)
+                df.to_pickle(single_year_path)
         
         if not all_data:
             raise ValueError("No data found for any year")
@@ -104,19 +118,16 @@ class FangraphsScraper:
         common_columns = set.intersection(*[set(df.columns) for df in all_data])
         all_data = [df[list(common_columns)] for df in all_data]
         
-        return pd.concat(all_data, ignore_index=True)
+
+        all_dfs = pd.concat(all_data, ignore_index=True)
+        all_dfs.to_pickle(all_years_file_path)
+        return all_dfs
 
 if __name__ == "__main__":
-    pd.set_option('display.max_rows', None)
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.max_colwidth', None)
-    pd.set_option('display.width', None)
-
-    scraper = FangraphsScraper(PositionCategory.SP, 2024, 2024)    
+    scraper = FangraphsScraper(PositionCategory.SP, 2019, 2019)    
     df = scraper.get_data()    
-    # with open("SP.txt", "w") as f:        
-    #     print(list(df.columns), file=f)
-
-    for col in ['SV', 'HLD', 'K', 'ER', 'BB', 'H', 'HBP', 'IP']:
-        if col not in list(df.columns):
-            print(f"Column {col} not found")
+    cols = list(df.columns)
+    with open("SP2.txt", "w") as f:        
+        print(cols, file=f)
+        print(len(cols), file=f)
+        

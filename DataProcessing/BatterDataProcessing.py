@@ -1,9 +1,15 @@
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from DataProcessing.DataProcessing import DataProcessing
 from FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
 from typing import List
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+import numpy as np
 
 
 class BatterDataProcessing(DataProcessing):
@@ -18,28 +24,45 @@ class BatterDataProcessing(DataProcessing):
             'O-Swing%', 'Z-Swing%', 'Swing%', 'O-Contact%', 
             'Z-Contact%', 'Contact%', 'Zone%', 'F-Strike%', 'SwStr%'
         ]
-        cols_to_invert = ['O-Swing%', 'SwStr%']
         
-        # Create a copy of the data for PCA
-        plate_disc_data = self.data[plate_discipline_columns].copy()
+        # Check which plate discipline columns are available
+        available_columns = [col for col in plate_discipline_columns if col in self.data.columns]
+        if len(available_columns) < 3:
+            print(f"Not enough plate discipline metrics available ({len(available_columns)}). Skipping PlateDisciplineScore.")
+            return
+            
+        cols_to_invert = ['O-Swing%', 'SwStr%']
+        available_cols_to_invert = [col for col in cols_to_invert if col in available_columns]
+        
+        # Create a copy of the data for PCA with available columns
+        plate_disc_data = self.data[available_columns].copy()
+        
+        # Handle missing values for PCA
+        plate_disc_data = plate_disc_data.fillna(plate_disc_data.mean())
         
         # Scale the data
         scaler = StandardScaler()
         plate_disc_data = pd.DataFrame(
             scaler.fit_transform(plate_disc_data),
-            columns=plate_discipline_columns
+            columns=available_columns
         )
         
-        # Invert 'lower is better' stats
-        for col in cols_to_invert:
+        # Invert 'lower is better' stats that are available
+        for col in available_cols_to_invert:
             plate_disc_data[col] = plate_disc_data[col] * -1
         
-        # PCA with more components
-        pca = PCA(n_components=3)
+        # PCA with appropriate number of components
+        n_components = min(3, len(available_columns))
+        pca = PCA(n_components=n_components)
         X_pca = pca.fit_transform(plate_disc_data)
         
-        # Calculate composite score
-        composite = 0.60 * X_pca[:, 0] + 0.40 * X_pca[:, 1] + 0.1 * X_pca[:, 2]
+        # Calculate composite score with weights
+        if n_components == 3:
+            composite = 0.60 * X_pca[:, 0] + 0.30 * X_pca[:, 1] + 0.10 * X_pca[:, 2]
+        elif n_components == 2:
+            composite = 0.70 * X_pca[:, 0] + 0.30 * X_pca[:, 1]
+        else:
+            composite = X_pca[:, 0]
         
         # Normalize to 0-100
         composite_min, composite_max = composite.min(), composite.max()
@@ -53,14 +76,24 @@ class BatterDataProcessing(DataProcessing):
 
     def filter_data(self):
         """Filter and reshape the data for batters"""
-        self.calc_plate_discipline_score()
+        # Try to calculate plate discipline score if metrics are available
+        try:
+            self.calc_plate_discipline_score()
+        except Exception as e:
+            print(f"Could not calculate plate discipline score: {e}")
         
-        columns = ['PlayerName', 'Age', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 'H', 'HBP',
-                  '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%',
-                  'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA', 'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning',
-                  'BABIP', 'Pull%', 'Cent%', 'Oppo%', 'BB/K', 'Offense']
-
-        self.data = self.data[columns]
+        # Define columns we want to keep if they exist
+        desired_columns = [
+            'PlayerName', 'Age', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 
+            'H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS',
+            'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%', 'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA',
+            'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning', 'BABIP', 'Pull%',
+            'Cent%', 'Oppo%', 'BB/K', 'Offense', 'WAR', 'OPS'
+        ]
+        
+        # Keep only columns that exist in the data
+        available_columns = [col for col in desired_columns if col in self.data.columns]
+        self.data = self.data[available_columns]
 
         self.reshape_data()
 
@@ -93,3 +126,4 @@ class BatterDataProcessing(DataProcessing):
     def get_counting_stats(self) -> List[str]:
         """Return a list of counting stats to remove for batters"""
         return ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
+    

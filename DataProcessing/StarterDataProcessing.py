@@ -1,6 +1,7 @@
 from DataProcessing.DataProcessing import DataProcessing
 from FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
+import numpy as np
 from typing import List
 
 class StarterDataProcessing(DataProcessing):
@@ -11,15 +12,15 @@ class StarterDataProcessing(DataProcessing):
     
     def filter_data(self):
         """Filter and reshape the data for starting pitchers"""
-        
-        columns = ['PlayerName', 'Age', 'Year', 'GS', 'IP', 'ERA', 'FIP', 'xFIP', 'SIERA', 
-                   'K/9', 'BB/9', 'HR/9', 'BABIP', 'LOB%', 'GB%', 'HR/FB', 'K%', 'BB%', 'HBP',
-                   'xERA', 'Stuff+', 'SO', 'BB', 'H', 'HR', 'ER', 'W', 'L', 'SV', 'HLD', 
-                   'Barrel%', 'HardHit%', 'EV', 'CSW%', 'SwStr%', 'Soft%', 'Med%', 'Hard%']
-        
-        # Keep only columns that exist
-        columns = [col for col in columns if col in self.data.columns]
-        self.data = self.data[columns]
+        # Define columns we want to keep if they exist
+        desired_columns = [
+            'PlayerName', 'Age', 'Year', 'IP', 'ERA', 'FIP', 'xFIP', 'SIERA', 
+            'K/9', 'BB/9', 'HR/9', 'BABIP', 'LOB%', 'GB%', 'HR/FB', 'K%', 'BB%', 
+            'HBP', 'xERA', 'SO', 'BB', 'HR', 'ER', 'W', 'L', 'H','Barrel%', 
+            'HardHit%', 'EV', 'C+SwStr%', 'SwStr%', 'Soft%', 'Med%', 'Hard%',
+            'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'QS'
+        ]
+        self.data = self.data[desired_columns]
         
         self.reshape_data()
 
@@ -35,13 +36,13 @@ class StarterDataProcessing(DataProcessing):
             if all(f'{year_str}_{stat}' in self.data.columns for stat in stats_to_check):
                 # Common fantasy scoring for pitchers (adjust as needed)
                 fantasy_points[f'{year_str}_TotalPoints'] = (
-                    self.data[f'{year_str}_IP'] * 3+     # Points per out
-                    self.data[f'{year_str}_SO'] * 3 +      # Points per strikeout
-                    self.data[f'{year_str}_W'] * 8 +      # Points per win
-                    self.data[f'{year_str}_ER'] * -3 +    # Negative points for earned runs
-                    self.data[f'{year_str}_H'] * -1.3 +   # Negative points for hits
-                    self.data[f'{year_str}_BB'] * -1.3 +   # Negative points for walks
-                    self.data[f'{year_str}_HBP'] * -1.3   # Negative points for hit by pitch
+                    self.data[f'{year_str}_IP'] * 3.35 +     # Points per out
+                    self.data[f'{year_str}_SO'] * 3.35 +      # Points per strikeout
+                    self.data[f'{year_str}_W'] * 8.35 +      # Points per win
+                    self.data[f'{year_str}_ER'] * -2.55 +    # Negative points for earned runs
+                    self.data[f'{year_str}_H'] * -0.85 +   # Negative points for hits
+                    self.data[f'{year_str}_BB'] * -0.85 +   # Negative points for walks
+                    self.data[f'{year_str}_HBP'] * -0.85   # Negative points for hit by pitch
                 )
         
         # Concatenate all fantasy points columns at once

@@ -5,6 +5,10 @@ old_points_predictors/
 models/
 __pycache__/
 .[!.]*/
+training_results/
+player_data/
+
+
 
 
 # Temporary files
@@ -18,3 +22,4 @@ __pycache__/
 *.json
 *.csv
 *.png
+.DS_Store

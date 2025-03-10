@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
 import pandas as pd
 import numpy as np
+from enum import Enum
 from sklearn.impute import KNNImputer
 from typing import List, TypedDict
 
@@ -51,6 +52,19 @@ class DataProcessing(ABC):
         """Reshape data so each player has one row with columns grouped by year"""
         # Get list of columns except PlayerName
         feature_cols = [col for col in self.data.columns if col != 'PlayerName']
+        with (open ("feature_cols.txt", "w")) as f:
+            f.write(str(feature_cols))
+            
+        # Store all possible stats across years to identify which ones might be missing
+        all_possible_stats = set()
+        for year in self.years:
+            # Get stats for this year
+            year_data = self.data[self.data['Year'] == year]
+            if not year_data.empty:
+                year_stats = [col for col in year_data.columns if col not in ['PlayerName', 'Year']]
+                all_possible_stats.update(year_stats)
+        
+        print(f"Total unique stats across all years: {len(all_possible_stats)}")
         
         # Create empty list to store reshaped data
         reshaped_data = []
@@ -65,15 +79,22 @@ class DataProcessing(ABC):
                 year_data = player_data[player_data['Year'] == year]
                 if not year_data.empty:
                     row = year_data.iloc[0]
-                    # Add each stat with year prefix, maintaining year grouping
-                    year_stats = {
-                        f"{year}_stats": {
-                            col: row[col] for col in feature_cols if col != 'Year'
-                        }
-                    }
-                    # Flatten the year_stats dictionary with year prefix
-                    for col, value in year_stats[f"{year}_stats"].items():
-                        player_dict[f"{year}_{col}"] = value
+                    
+                    # Add available stats with year prefix
+                    for col in feature_cols:
+                        if col != 'Year' and col in row:
+                            player_dict[f"{year}_{col}"] = row[col]
+                        
+                    # Also create placeholders for stats that exist in other years but not this one
+                    for stat in all_possible_stats:
+                        if stat not in year_data.columns and stat != 'Year':
+                            player_dict[f"{year}_{stat}"] = np.nan
+                
+                # If player has no data for this year, add NaN for all stats
+                else:
+                    for stat in all_possible_stats:
+                        if stat != 'Year':
+                            player_dict[f"{year}_{stat}"] = np.nan
             
             reshaped_data.append(player_dict)
         
@@ -87,7 +108,9 @@ class DataProcessing(ABC):
         # Get numeric columns for imputation (exclude PlayerName)
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         
-        # Initialize and fit KNNImputer
+        print(f"Missing values before imputation: {df[numeric_cols].isna().sum().sum()}")
+        
+        # Initialize KNNImputer
         imputer = KNNImputer(n_neighbors=5, weights='distance')
         
         # Impute missing values
@@ -95,6 +118,8 @@ class DataProcessing(ABC):
         
         # Create new DataFrame with imputed values
         imputed_df = pd.DataFrame(imputed_data, columns=numeric_cols, index=df.index)
+        
+        print(f"Missing values after imputation: {imputed_df.isna().sum().sum()}")
         
         # Reattach PlayerName column
         imputed_df.insert(0, 'PlayerName', player_names)
@@ -108,6 +133,18 @@ class DataProcessing(ABC):
         # Final column order: PlayerName followed by year groups
         final_cols = ['PlayerName'] + year_groups
         self.data = imputed_df[final_cols]
+        
+        # Print summary of what was imputed
+        stats_added = {}
+        for year in self.years:
+            year_str = str(year)
+            year_cols = [col.replace(f"{year_str}_", "") for col in self.data.columns if col.startswith(f"{year_str}_")]
+            stats_added[year] = len(year_cols)
+            
+        print("Stats per year after imputation:")
+        for year, count in stats_added.items():
+            print(f"  {year}: {count} stats")
+            
         return self.data
 
     def create_rolling_datasets(self) -> List[DatasetSplit]:
@@ -203,20 +240,20 @@ class DataProcessing(ABC):
         
         return processed_windows
 
-    def remove_stats(self, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        '''Remove counting stats from training data'''
-        for window in windows:
-            weighted_data = window['weighted_data']
-            # Get counting stats to drop from concrete class implementation
-            cols_to_drop = self.get_counting_stats()
+    # def remove_stats(self, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
+    #     '''Remove counting stats from training data'''
+    #     for window in windows:
+    #         weighted_data = window['weighted_data']
+    #         # Get counting stats to drop from concrete class implementation
+    #         cols_to_drop = self.get_counting_stats()
 
-            # Drop only columns that actually exist
-            cols_to_drop = [col for col in cols_to_drop if col in weighted_data.columns]
-            if cols_to_drop:
-                weighted_data = weighted_data.drop(cols_to_drop, axis=1)
-            window['weighted_data'] = weighted_data
+    #         # Drop only columns that actually exist
+    #         cols_to_drop = [col for col in cols_to_drop if col in weighted_data.columns]
+    #         if cols_to_drop:
+    #             weighted_data = weighted_data.drop(cols_to_drop, axis=1)
+    #         window['weighted_data'] = weighted_data
 
-        return windows
+    #     return windows
 
     def remove_year_prefixes(self, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
         '''Remove year prefixes from validation and test data columns'''
@@ -235,46 +272,15 @@ class DataProcessing(ABC):
             # Also remove 'weighted_' prefix from weighted_data
             weighted_cols = window['weighted_data'].columns
             weighted_rename = {
-                col: col.replace("weighted_", "") 
-                for col in weighted_cols 
+                col: col.replace("weighted_", "") for col in weighted_cols 
                 if col.startswith("weighted_") and col != "PlayerName"
             }
             window['weighted_data'] = window['weighted_data'].rename(columns=weighted_rename)
         
         return windows
-
-#     def prepare_data_for_modeling(self) -> List[WeightedDatasetSplit]:
-#         """
-#         Prepare data for modeling by creating datasets, applying weights, and preprocessing.
-#         Returns a list of preprocessed training windows ready for model training.
-#         """
-#         # Create rolling datasets
-#         print("Creating datasets...\n")
-#         datasets = self.create_rolling_datasets()
-#         print(f"Number of datasets: {len(datasets)}\n")
-
-#         # Get processed training windows
-#         print("Processing training windows...\n")
-#         processed_windows = self.concat_training_windows(datasets)
-
-#         # Remove year prefixes
-#         print("Removing year prefixes...\n")
-#         processed_windows = self.remove_year_prefixes(processed_windows)
-
-#         # Remove counting stats from training data
-#         print("Removing counting stats from training data...\n")
-#         processed_windows = self.remove_stats(processed_windows)
-        
-#         return processed_windows
-
-# if __name__ == '__main__':
-#     # Example usage with batters
-#     print("Processing batter data...")
-#     batters = BatterDataProcessing()
-#     batters.filter_data()
-#     batters.calc_fantasy_points()
     
-#     # Save reshaped data to file
-#     with open("reshaped_batter_data.txt", "w") as f:
-#         f.write(batters.data.to_string())
-
+    def filter_and_calc_points(self):
+        """Filter data and calculate fantasy points for batters"""
+        self.filter_data()
+        self.calc_fantasy_points()
+        

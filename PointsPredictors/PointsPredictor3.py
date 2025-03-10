@@ -1,65 +1,148 @@
 import sys
 import os
-# Add parent directory to Python path
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-training_dir = "training_results"  # or any other directory name you prefer
-models = "models"  # or any other directory name you prefer
+training_dir = "training_results"
+models = "models" 
 os.makedirs(models, exist_ok=True)
 os.makedirs(training_dir, exist_ok=True)
 
-from DataProcessing.DataProcessing import WeightedDatasetSplit
+from DataProcessing.DataProcessing import WeightedDatasetSplit, DataProcessing
 from DataProcessing.BatterDataProcessing import BatterDataProcessing
 from DataProcessing.StarterDataProcessing import StarterDataProcessing
 from DataProcessing.RelieverDataProcessing import RelieverDataProcessing
-from DataProcessing.DataProcessingComposition import TrainingDataProcessor
+from DataProcessing.DataPipelines import TrainingDataPrep, LeagueType
+from FangraphsScraper.fangraphsScraper import PositionCategory  
 import pandas as pd
 import numpy as np
 from typing import List
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from abc import ABC, abstractmethod
 
-class BaseModel(ABC):
+STARTER_PARAMS = {
+                'n_estimators': [430],
+                'learning_rate': [0.06],
+                'max_depth': [2],
+                'min_child_weight': [6],
+                'subsample': [0.75],
+                'colsample_bytree': [0.76],
+                'gamma': [0],
+                'reg_alpha': [0.07],
+                'reg_lambda': [0.52],
+            }
+BATTER_PARAMS = {
+                'n_estimators': [430],
+                'learning_rate': [0.065],
+                'max_depth': [2],
+                'min_child_weight': [6],
+                'subsample': [0.75],
+                'colsample_bytree': [0.775],
+                'gamma': [0.0175],
+                'reg_alpha': [0.075],
+                'reg_lambda': [0.52],
+            }   
 
-    @staticmethod
-    def train_model(windows: List[WeightedDatasetSplit]) -> xgb.XGBRegressor:
-        '''Train single XGBoost model and predict on validation data'''
+# TODO
+RELIEVER_PARAMS = {
+                'n_estimators': [430],
+                'learning_rate': [0.06],
+                'max_depth': [2],
+                'min_child_weight': [6],
+                'subsample': [0.75],
+                'colsample_bytree': [0.76],
+                'gamma': [0],
+                'reg_alpha': [0.07],
+                'reg_lambda': [0.52],
+            }
 
-        # Create single model instance
-        model = xgb.XGBRegressor(
-            objective='reg:squarederror',
-            tree_method='hist',
-            n_estimators=430,
-            learning_rate=0.065,
-            max_depth=2,
-            min_child_weight=6,
-            subsample=0.75,
-            colsample_bytree=0.775,
-            gamma=0.0175,
-            reg_alpha=0.075,
-            reg_lambda=0.52,
-            random_state=42,
-        )
+class Model():
+    def __init__(self, data_prep: TrainingDataPrep, league_type: LeagueType = LeagueType.POINTS, category: str = "TotalPoints"):
+        self.league_type = league_type
+        self.position_category = data_prep.data_processor.position_category
+
+        if (self.league_type != data_prep.league_type):
+            raise ValueError("Mismatched league types between model and data processor")
+
+        if self.league_type == LeagueType.POINTS:
+            self.category = "TotalPoints"
+            self.invalid_cols = data_prep.data_processor.get_counting_stats()
+        else:
+            self.category = category
+            self.invalid_cols = []
+
+    def hyperparam_tune(self, X_train: pd.DataFrame, y_train: pd.Series) -> xgb.XGBRegressor:
+            """Perform hyperparameter tuning using GridSearchCV"""
+            print("Tuning Hyperparameters...\n")
+            tscv = TimeSeriesSplit(n_splits=5)
+            
+            param_grid = {
+                'n_estimators': [430],
+                'learning_rate': [0.06],
+                'max_depth': [2],
+                'min_child_weight': [6],
+                'subsample': [0.75],
+                'colsample_bytree': [0.76],
+                'gamma': [0],
+                'reg_alpha': [0.07],
+                'reg_lambda': [0.52],
+            }
+
+            model = xgb.XGBRegressor(
+                objective='reg:squarederror',
+                tree_method='hist',
+                random_state=42
+            )
+
+            grid_search = GridSearchCV(
+                model, param_grid, cv=tscv, scoring='r2', 
+                n_jobs=-1, verbose=1
+            )
+
+            grid_search.fit(X_train, y_train)
+            best_model = grid_search.best_estimator_
+            with open(os.path.join(training_dir, "best_hyperparams.txt"), "a") as f:
+                f.write(f"Best hyperparameters: {grid_search.best_params_}\n")
+                f.write(f"Best R² Score: {grid_search.best_score_}\n\n")
+            print(f"Best hyperparameters: {grid_search.best_params_}\n")
+
+            return best_model
+
+    def train_model(self, windows: List[WeightedDatasetSplit], tune_hyperparams: bool = False) -> xgb.XGBRegressor:
+        '''Train single XGBoost model on combined data from all windows'''
+        
+        # Determine which parameter set to use based on model type
+        if self.position_category == PositionCategory.BATTER:
+            params = BATTER_PARAMS
+        elif self.position_category == PositionCategory.SP:
+            params = STARTER_PARAMS 
+        elif self.position_category == PositionCategory.RP:
+            params = RELIEVER_PARAMS
+        else:
+            raise TypeError("Unknown model type")
         
         # Accumulate training data across windows
         all_X = []
         all_y = []
+
+        
         
         # Collect all training data
         for window in windows:
             weighted_data = window['weighted_data']
             
             feature_cols = [col for col in weighted_data.columns 
-                        if col != 'PlayerName' and col != 'TotalPoints']
+                        if col != 'PlayerName' and col != self.category]
 
-            if 'TotalPoints' not in weighted_data.columns or not feature_cols:
-                print(f"Skipping window with training years {window['train_years']}: missing required columns.")
+            if self.category  not in weighted_data.columns or not feature_cols:
+                print(f"Skipping window with training years {window['train_years']}: missing required column: {self.category}.")
                 continue
                 
-            train_df = weighted_data[['PlayerName'] + feature_cols + ['TotalPoints']].dropna()
+            train_df = weighted_data[['PlayerName'] + feature_cols + [self.category ]].dropna()
             
             X = train_df[feature_cols]
-            y = train_df['TotalPoints']
+            y = train_df[self.category]
             
             all_X.append(X)
             all_y.append(y)
@@ -67,6 +150,18 @@ class BaseModel(ABC):
         # Train model on combined data
         X_full = pd.concat(all_X)
         y_full = pd.concat(all_y)
+
+        if tune_hyperparams:
+            model = self.hyperparam_tune(X_full, y_full)
+        else:
+            # Create model with parameter values from the first item of each parameter list
+            model_params = {k: v[0] for k, v in params.items()}
+            model = xgb.XGBRegressor(
+                objective='reg:squarederror',
+                tree_method='hist',
+                random_state=42,
+                **model_params
+            )
         
         model.fit(X_full, y_full, verbose=False)
         
@@ -117,36 +212,31 @@ class BaseModel(ABC):
         model.save_model(filepath)
         print(f"Model successfully saved to {filepath}")
         
-    @staticmethod
-    @abstractmethod
-    def predict_model(model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        pass
-
-class BatterModel(BaseModel):
-    """Concrete implementation for batter modeling"""
-    
-    @staticmethod
-    def predict_model(model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
+    def predict_model(self, model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
         """
-        Make predictions on test data for each window using the trained model
+        Make predictions on test data for each window using the trained model.
+        Handles both points and category-based league types.
         
         Args:
             model: Trained XGBRegressor model
             windows: List of data windows containing test data
+            target_col: Target column to predict (default: "TotalPoints")
+            league_type: Type of league (points or categories)
             
         Returns:
             List of windows with predictions added
         """
         # Make predictions on test data for each window
-        invalid_cols = ['1B', '2B', '3B', 'HR', 'R', 'RBI', 'HBP', 'SB']
+        # For points leagues, exclude counting stats
+        
         for window in windows:
             test_data = window['test_data']
             test_year = window['test_year']
             
-            # Get validation features (removing year prefix)
+            # Get validation features (removing year prefix and invalid columns)
             val_features = [col for col in test_data.columns 
-                          if col != 'PlayerName' and col != 'TotalPoints' 
-                          and col not in invalid_cols]
+                          if col != 'PlayerName' and col != self.category 
+                          and col not in self.invalid_cols]
             
             if not val_features:
                 print(f"Skipping predictions for validation year {test_year}: no features found")
@@ -154,120 +244,20 @@ class BatterModel(BaseModel):
                 
             X_val = test_data[val_features]
             
-            # Check if TotalPoints exists in test data
-            if 'TotalPoints' in test_data.columns:
-                y_val = test_data['TotalPoints']
+            # Check if target column exists in test data
+            if self.category in test_data.columns:
+                y_val = test_data[self.category]
             else:
                 y_val = pd.Series([np.nan] * len(test_data))
-                print(f"Warning: No TotalPoints found in test data for year {test_year}")
+                print(f"Warning: No {self.category} found in test data for year {test_year}")
             
             val_predictions = model.predict(X_val)
             
             window['model'] = model
             window['predictions'] = pd.DataFrame({
                 'PlayerName': test_data['PlayerName'],
-                'predicted_TotalPoints': val_predictions,
-                'actual_TotalPoints': y_val.values
-            })
-        
-        return windows
-
-class StarterModel(BaseModel):
-    """Concrete implementation for starting pitcher modeling"""
-    
-    @staticmethod
-    def predict_model(model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        """
-        Make predictions on test data for each window using the trained model
-        
-        Args:
-            model: Trained XGBRegressor model
-            windows: List of data windows containing test data
-            
-        Returns:
-            List of windows with predictions added
-        """
-        # Make predictions on test data for each window
-        invalid_cols = ['W', 'SO', 'ER', 'BB', 'H', 'HBP', 'IP']
-        for window in windows:
-            test_data = window['test_data']
-            test_year = window['test_year']
-            
-            # Get validation features (removing year prefix)
-            val_features = [col for col in test_data.columns 
-                          if col != 'PlayerName' and col != 'TotalPoints' 
-                          and col not in invalid_cols]
-            
-            if not val_features:
-                print(f"Skipping predictions for validation year {test_year}: no features found")
-                continue
-                
-            X_val = test_data[val_features]
-            
-            # Check if TotalPoints exists in test data
-            if 'TotalPoints' in test_data.columns:
-                y_val = test_data['TotalPoints']
-            else:
-                y_val = pd.Series([np.nan] * len(test_data))
-                print(f"Warning: No TotalPoints found in test data for year {test_year}")
-            
-            val_predictions = model.predict(X_val)
-            
-            window['model'] = model
-            window['predictions'] = pd.DataFrame({
-                'PlayerName': test_data['PlayerName'],
-                'predicted_TotalPoints': val_predictions,
-                'actual_TotalPoints': y_val.values
-            })
-        
-        return windows
-    
-class RelieverModel(BaseModel):
-    """Concrete implementation for starting pitcher modeling"""
-    
-    @staticmethod
-    def predict_model(model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        """
-        Make predictions on test data for each window using the trained model
-        
-        Args:
-            model: Trained XGBRegressor model
-            windows: List of data windows containing test data
-            
-        Returns:
-            List of windows with predictions added
-        """
-        # Make predictions on test data for each window
-        invalid_cols = ['SV', 'HLD', 'SO', 'ER', 'BB', 'H', 'HBP', 'IP']
-        for window in windows:
-            test_data = window['test_data']
-            test_year = window['test_year']
-            
-            # Get validation features (removing year prefix)
-            val_features = [col for col in test_data.columns 
-                          if col != 'PlayerName' and col != 'TotalPoints' 
-                          and col not in invalid_cols]
-            
-            if not val_features:
-                print(f"Skipping predictions for validation year {test_year}: no features found")
-                continue
-                
-            X_val = test_data[val_features]
-            
-            # Check if TotalPoints exists in test data
-            if 'TotalPoints' in test_data.columns:
-                y_val = test_data['TotalPoints']
-            else:
-                y_val = pd.Series([np.nan] * len(test_data))
-                print(f"Warning: No TotalPoints found in test data for year {test_year}")
-            
-            val_predictions = model.predict(X_val)
-            
-            window['model'] = model
-            window['predictions'] = pd.DataFrame({
-                'PlayerName': test_data['PlayerName'],
-                'predicted_TotalPoints': val_predictions,
-                'actual_TotalPoints': y_val.values
+                f'predicted_{self.category}': val_predictions,
+                f'actual_{self.category}': y_val.values
             })
         
         return windows
@@ -276,13 +266,12 @@ def main():
     ##### BATTERS #####
     print("=" * 50 + " BATTERS " + "=" * 50)
     print("Loading data...\n")
-    data_processor = BatterDataProcessing()
-    data_processor.filter_data()
-    data_processor.calc_fantasy_points()
+    batter_data = BatterDataProcessing()
+    batter_data.filter_and_calc_points()
     
     # Use the data processor to prepare windows
-    data_processor = TrainingDataProcessor(data_processor)
-    processed_windows = data_processor.prepare_data()
+    data_prep = TrainingDataPrep(batter_data)
+    processed_windows = data_prep.prepare_data()
 
     # Print all data to file
     with open(os.path.join(training_dir,'batter_data.txt'), 'w') as f:
@@ -303,15 +292,16 @@ def main():
 
     # Train model
     print("Training models...\n")
-    model = BatterModel.train_model(processed_windows)
+    batter_model = Model(data_prep)
+    model = batter_model.train_model(processed_windows, tune_hyperparams=False)
 
     # Save trained model
     print("Saving model...\n")
-    BatterModel.save_trained_model(model, os.path.join(models,"batter_model.json"))
+    Model.save_trained_model(model, os.path.join(models,"batter_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
-    tested_windows =  BatterModel.predict_model(model, processed_windows)
+    tested_windows = batter_model.predict_model(model, processed_windows)
 
     with open(os.path.join(training_dir,"batter_predictions.txt"), "w") as f:
         # Track overall metrics
@@ -327,7 +317,7 @@ def main():
             predictions = window["predictions"].copy()
             
             # Calculate metrics
-            metrics =  RelieverModel.calculate_metrics(
+            metrics =  Model.calculate_metrics(
                 predictions['actual_TotalPoints'],
                 predictions['predicted_TotalPoints']
             )
@@ -367,12 +357,11 @@ def main():
     ##### STARTERS #####
     print("=" * 50 + " STARTERS " + "=" * 50)
     print("Loading data...\n")
-    data_processor = StarterDataProcessing()
-    data_processor.filter_data()
-    data_processor.calc_fantasy_points()
+    starter_data = StarterDataProcessing()
+    starter_data.filter_and_calc_points()
     
     # Use the data processor to prepare windows
-    data_processor = TrainingDataProcessor(data_processor)
+    data_processor = TrainingDataPrep(starter_data)
     processed_windows = data_processor.prepare_data()
 
     # Print all data to file
@@ -394,15 +383,16 @@ def main():
 
     # Train model
     print("Training models...\n")
-    model = StarterModel.train_model(processed_windows)
+    starter_model = Model(data_processor)
+    model = starter_model.train_model(processed_windows, tune_hyperparams=False)
 
     # Save trained model
     print("Saving model...\n")
-    StarterModel.save_trained_model(model, os.path.join(models,"starter_model.json"))
+    Model.save_trained_model(model, os.path.join(models,"starter_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
-    tested_windows =  StarterModel.predict_model(model, processed_windows)
+    tested_windows = starter_model.predict_model(model, processed_windows)
 
     with open(os.path.join(training_dir,"starter_predictions.txt"), "w") as f:
         # Track overall metrics
@@ -418,7 +408,7 @@ def main():
             predictions = window["predictions"].copy()
             
             # Calculate metrics
-            metrics =  RelieverModel.calculate_metrics(
+            metrics = Model.calculate_metrics(
                 predictions['actual_TotalPoints'],
                 predictions['predicted_TotalPoints']
             )
@@ -458,12 +448,11 @@ def main():
     ##### RELIEVERS #####
     print("=" * 50 + " RELIEVERS " + "=" * 50)
     print("Loading data...\n")
-    data_processor = RelieverDataProcessing()
-    data_processor.filter_data()
-    data_processor.calc_fantasy_points()
+    reliever_data = RelieverDataProcessing()
+    reliever_data.filter_and_calc_points()
     
     # Use the data processor to prepare windows
-    data_processor = TrainingDataProcessor(data_processor)
+    data_processor = TrainingDataPrep(reliever_data)
     processed_windows = data_processor.prepare_data()
 
     # Print all data to file
@@ -483,17 +472,18 @@ def main():
             f.write(window['test_data'].to_string())
             f.write(f"\n{'='*80}\n")
 
-    # Train model
+     # Train model
     print("Training models...\n")
-    model = RelieverModel.train_model(processed_windows)
+    reliever_model = Model(data_processor)
+    model = reliever_model.train_model(processed_windows, tune_hyperparams=False)
 
     # Save trained model
     print("Saving model...\n")
-    RelieverModel.save_trained_model(model, os.path.join(models,"reliever_model.json"))
+    Model.save_trained_model(model, os.path.join(models,"reliever_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
-    tested_windows =  RelieverModel.predict_model(model, processed_windows)
+    tested_windows = reliever_model.predict_model(model, processed_windows)
 
     with open(os.path.join(training_dir,"reliever_predictions.txt"), "w") as f:
         # Track overall metrics
@@ -509,7 +499,7 @@ def main():
             predictions = window["predictions"].copy()
             
             # Calculate metrics
-            metrics =  RelieverModel.calculate_metrics(
+            metrics =  Model.calculate_metrics(
                 predictions['actual_TotalPoints'],
                 predictions['predicted_TotalPoints']
             )
