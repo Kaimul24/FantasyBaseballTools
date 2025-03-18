@@ -2,7 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-predictions_2025 = "predictions_2025"  # or any other directory name you prefer
+predictions_2025 = "predictions_2025"
 os.makedirs(predictions_2025, exist_ok=True)
 
 from FangraphsScraper.fangraphsScraper import PositionCategory

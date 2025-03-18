@@ -17,6 +17,28 @@ class BatterDataProcessing(DataProcessing):
     
     def __init__(self, start_year: int = 2019, end_year: int = 2024):
         super().__init__(PositionCategory.BATTER, start_year, end_year)
+        self.stat_categories = ['R', 'RBI', 'HR', 'SO', 'TB', 'OPS', 'NSB']
+
+    def calc_net_stolen_bases(self):
+        sb = self.data['SB']
+        cs = self.data['CS']
+        nsb = sb - cs
+        self.data = pd.concat([
+            self.data,
+            pd.Series(nsb, name='NSB', index=self.data.index)
+        ], axis=1)
+
+    def calc_tb(self):
+        singles = self.data['1B']
+        doubles = self.data['2B']
+        triples = self.data['3B']
+        home_runs = self.data['HR']
+        tb = singles + (2 * doubles) + (3 * triples) + (4 * home_runs)
+
+        self.data = pd.concat([
+            self.data,
+            pd.Series(tb, name='TB', index=self.data.index)
+        ], axis=1)
     
     def calc_plate_discipline_score(self):
         """Calculate plate discipline score using multiple PCA components."""
@@ -76,24 +98,23 @@ class BatterDataProcessing(DataProcessing):
 
     def filter_data(self):
         """Filter and reshape the data for batters"""
-        # Try to calculate plate discipline score if metrics are available
-        try:
-            self.calc_plate_discipline_score()
-        except Exception as e:
-            print(f"Could not calculate plate discipline score: {e}")
-        
+        self.calc_plate_discipline_score()
+        self.calc_net_stolen_bases()
+        self.calc_tb()
+
         # Define columns we want to keep if they exist
         desired_columns = [
-            'PlayerName', 'Age', 'Year', 'G', 'PA', 'AB', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 
-            'H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS',
+            'PlayerName', 'Age', 'Year', 'G', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 
+            'H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'NSB',
             'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%', 'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA',
             'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning', 'BABIP', 'Pull%',
-            'Cent%', 'Oppo%', 'BB/K', 'Offense', 'WAR', 'OPS'
+            'Cent%', 'Oppo%', 'BB/K', 'Offense', 'WAR', 'OPS', 'SO', 'TB', 'wBsR'
         ]
         
         # Keep only columns that exist in the data
         available_columns = [col for col in desired_columns if col in self.data.columns]
         self.data = self.data[available_columns]
+        assert 'wBsR' in self.data.columns
 
         self.reshape_data()
 

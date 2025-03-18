@@ -124,10 +124,9 @@ class FangraphsScraper:
         return all_dfs
 
 if __name__ == "__main__":
-    scraper = FangraphsScraper(PositionCategory.SP, 2019, 2019)    
+    scraper = FangraphsScraper(PositionCategory.BATTER, 2019, 2019)    
     df = scraper.get_data()    
     cols = list(df.columns)
-    with open("SP2.txt", "w") as f:        
+    with open("cols_batter.txt", "w") as f:        
         print(cols, file=f)
-        print(len(cols), file=f)
         

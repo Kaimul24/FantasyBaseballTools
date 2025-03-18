@@ -7,19 +7,19 @@ models = "models"
 os.makedirs(models, exist_ok=True)
 os.makedirs(training_dir, exist_ok=True)
 
-from DataProcessing.DataProcessing import WeightedDatasetSplit, DataProcessing
+from DataProcessing.DataProcessing import WeightedDatasetSplit
 from DataProcessing.BatterDataProcessing import BatterDataProcessing
 from DataProcessing.StarterDataProcessing import StarterDataProcessing
 from DataProcessing.RelieverDataProcessing import RelieverDataProcessing
-from DataProcessing.DataPipelines import TrainingDataPrep, LeagueType
+from DataProcessing.DataPipelines import TrainingDataPrep, PredictionDataPrep, LeagueType
 from FangraphsScraper.fangraphsScraper import PositionCategory  
+from enum import Enum
 import pandas as pd
 import numpy as np
-from typing import List
+from typing import List, Union
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
-from abc import ABC, abstractmethod
 
 STARTER_PARAMS = {
                 'n_estimators': [430],
@@ -58,7 +58,7 @@ RELIEVER_PARAMS = {
             }
 
 class Model():
-    def __init__(self, data_prep: TrainingDataPrep, league_type: LeagueType = LeagueType.POINTS, category: str = "TotalPoints"):
+    def __init__(self, data_prep: Union[TrainingDataPrep, PredictionDataPrep], league_type: LeagueType = LeagueType.POINTS, category: str = "TotalPoints"):
         self.league_type = league_type
         self.position_category = data_prep.data_processor.position_category
 
@@ -125,8 +125,6 @@ class Model():
         # Accumulate training data across windows
         all_X = []
         all_y = []
-
-        
         
         # Collect all training data
         for window in windows:
@@ -135,13 +133,22 @@ class Model():
             feature_cols = [col for col in weighted_data.columns 
                         if col != 'PlayerName' and col != self.category]
 
-            if self.category  not in weighted_data.columns or not feature_cols:
+            if self.category not in weighted_data.columns or not feature_cols:
                 print(f"Skipping window with training years {window['train_years']}: missing required column: {self.category}.")
                 continue
                 
-            train_df = weighted_data[['PlayerName'] + feature_cols + [self.category ]].dropna()
-            
+            train_df = weighted_data[['PlayerName'] + feature_cols + [self.category]].dropna()
+
             X = train_df[feature_cols]
+
+            if self.league_type == LeagueType.CATEGORIES:
+                if self.category == 'TB':
+                    X = X.drop(['1B', '2B', '3B', 'HR'], axis=1)
+                elif self.category == 'NSB':
+                    X = X.drop(['SB', 'CS'], axis=1)
+                elif self.category == 'OPS':
+                    X = X.drop(['OBP', 'SLG'], axis=1)
+
             y = train_df[self.category]
             
             all_X.append(X)
@@ -211,7 +218,7 @@ class Model():
         """
         model.save_model(filepath)
         print(f"Model successfully saved to {filepath}")
-        
+     
     def predict_model(self, model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
         """
         Make predictions on test data for each window using the trained model.
@@ -227,12 +234,11 @@ class Model():
             List of windows with predictions added
         """
         # Make predictions on test data for each window
-        # For points leagues, exclude counting stats
         
         for window in windows:
             test_data = window['test_data']
             test_year = window['test_year']
-            
+
             # Get validation features (removing year prefix and invalid columns)
             val_features = [col for col in test_data.columns 
                           if col != 'PlayerName' and col != self.category 
@@ -243,6 +249,13 @@ class Model():
                 continue
                 
             X_val = test_data[val_features]
+            if self.league_type == LeagueType.CATEGORIES:
+                if self.category == 'TB':
+                    X_val = X_val.drop(['1B', '2B', '3B', 'HR'], axis=1)
+                elif self.category == 'NSB':
+                    X_val = X_val.drop(['SB', 'CS'], axis=1)
+                elif self.category == 'OPS':
+                    X_val = X_val.drop(['OBP', 'SLG'], axis=1)
             
             # Check if target column exists in test data
             if self.category in test_data.columns:

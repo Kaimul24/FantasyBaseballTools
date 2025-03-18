@@ -64,9 +64,9 @@ class BaseDataPrep(ABC):
             
             # Set weights: 50% most recent, 30% second most recent, 20% third most recent
             weights = {}
-            if year3_col: weights[year3_col] = 0.5
-            if year2_col: weights[year2_col] = 0.3
-            if year1_col: weights[year1_col] = 0.2
+            if year3_col: weights[year3_col] = 0.4
+            if year2_col: weights[year2_col] = 0.35
+            if year1_col: weights[year1_col] = 0.25
             
             # Normalize weights if some years are missing
             if weights:
@@ -168,7 +168,7 @@ class BaseDataPrep(ABC):
 class TrainingDataPrep(BaseDataPrep):
     """
     Class for processing data for model training.
-    Includes functions for creating rolling datasets, applying weights, and preprocessing data.
+    Includes function for creating rolling datasets.
     """
         
     def create_dataset(self) -> List[DatasetSplit]:
@@ -233,7 +233,7 @@ class PredictionDataPrep(BaseDataPrep):
                        if '_' in col and col.split('_')[0].isdigit()])
         
         # Take the 3 most recent years
-        recent_years = sorted(years)[-3:]
+        recent_years = sorted(set(years))
         
         if len(recent_years) < 3:
             print(f"Warning: Less than 3 years available: {recent_years}")
