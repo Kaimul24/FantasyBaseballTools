@@ -2,7 +2,7 @@ import pandas as pd
 from typing import List, Union, Dict, Any
 from enum import Enum
 from abc import ABC, abstractmethod
-from DataProcessing.DataProcessing import (
+from ..DataProcessing.DataProcessing import (
     DatasetSplit, WeightedDatasetSplit, PredictionDataset, DataProcessing
 )
 

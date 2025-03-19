@@ -1,17 +1,15 @@
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-predictions_2025 = "predictions_2025"
-os.makedirs(predictions_2025, exist_ok=True)
-
-from FangraphsScraper.fangraphsScraper import PositionCategory
-from DataProcessing.DataPipelines import PredictionDataPrep
-from DataProcessing.BatterDataProcessing import BatterDataProcessing
-from DataProcessing.StarterDataProcessing import StarterDataProcessing
-from DataProcessing.RelieverDataProcessing import RelieverDataProcessing
+from ..FangraphsScraper.fangraphsScraper import PositionCategory
+from ..DataProcessing.DataPipelines import PredictionDataPrep
+from ..DataProcessing.BatterDataProcessing import BatterDataProcessing
+from ..DataProcessing.StarterDataProcessing import StarterDataProcessing
+from ..DataProcessing.RelieverDataProcessing import RelieverDataProcessing
 import pandas as pd
 import xgboost as xgb
+
+from config import PREDICTIONS_DIR
 
 def load_model(filepath: str) -> xgb.XGBRegressor:
     """
@@ -143,12 +141,12 @@ def main():
     print(combined_predictions.head(20))
     
     # Save position-specific predictions to CSV
-    batter_predictions.to_csv(os.path.join(predictions_2025, "predicted_2025_batters.csv"), index=False)
-    starter_predictions.to_csv(os.path.join(predictions_2025,"predicted_2025_starters.csv"), index=False)
-    reliever_predictions.to_csv(os.path.join(predictions_2025,"predicted_2025_relievers.csv"), index=False)
+    batter_predictions.to_csv((PREDICTIONS_DIR / "predicted_2025_batters.csv"), index=False)
+    starter_predictions.to_csv((PREDICTIONS_DIR / "predicted_2025_starters.csv"), index=False)
+    reliever_predictions.to_csv((PREDICTIONS_DIR / "predicted_2025_relievers.csv"), index=False)
     
     # Save combined predictions to CSV
-    combined_predictions.to_csv(os.path.join(predictions_2025, "predicted_2025_all.csv"), index=False)
+    combined_predictions.to_csv((PREDICTIONS_DIR / "predicted_2025_all.csv"), index=False)
     print("\nPredictions saved to CSV files:")
     print("- predicted_2025_batters.csv")
     print("- predicted_2025_starters.csv")

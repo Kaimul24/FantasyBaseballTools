@@ -3,8 +3,8 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from DataProcessing.DataProcessing import DataProcessing
-from FangraphsScraper.fangraphsScraper import PositionCategory
+from ..DataProcessing.DataProcessing import DataProcessing
+from ..FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
 from typing import List
 from sklearn.decomposition import PCA
