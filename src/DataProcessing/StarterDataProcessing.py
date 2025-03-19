@@ -1,5 +1,5 @@
-from DataProcessing.DataProcessing import DataProcessing
-from FangraphsScraper.fangraphsScraper import PositionCategory
+from ..DataProcessing.DataProcessing import DataProcessing
+from ..FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
 import numpy as np
 from typing import List

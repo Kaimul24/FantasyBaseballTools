@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
+from ..FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
 import pandas as pd
 import numpy as np
 from enum import Enum

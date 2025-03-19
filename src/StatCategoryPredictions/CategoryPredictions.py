@@ -6,13 +6,13 @@ stats_category_models = "stats_category_models"
 os.makedirs(stats_category_models, exist_ok=True)
 
 
-from PointsPredictors.PointsPredictor3 import Model
-from DataProcessing.DataPipelines import TrainingDataPrep, LeagueType, BaseDataPrep
-from DataProcessing.BatterDataProcessing import BatterDataProcessing
-from DataProcessing.StarterDataProcessing import StarterDataProcessing
-from DataProcessing.RelieverDataProcessing import RelieverDataProcessing
-from DataProcessing.DataProcessing import WeightedDatasetSplit, DataProcessing
-from FangraphsScraper.fangraphsScraper import PositionCategory 
+from ..PointsPredictors.PointsPredictor3 import Model
+from ..DataProcessing.DataPipelines import TrainingDataPrep, LeagueType, BaseDataPrep
+from ..DataProcessing.BatterDataProcessing import BatterDataProcessing
+from ..DataProcessing.StarterDataProcessing import StarterDataProcessing
+from ..DataProcessing.RelieverDataProcessing import RelieverDataProcessing
+from ..DataProcessing.DataProcessing import WeightedDatasetSplit, DataProcessing
+from ..FangraphsScraper.fangraphsScraper import PositionCategory 
 import pandas as pd
 import numpy as np
 

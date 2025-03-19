@@ -3,10 +3,9 @@ import json
 import requests
 import pandas as pd
 from enum import Enum
-import os
 
-data_dir = "player_data"
-os.makedirs(data_dir, exist_ok=True)
+from config import DATA_DIR
+
 class PositionCategory(Enum):
     BATTER = 1
     SP = 2
@@ -88,14 +87,14 @@ class FangraphsScraper:
     """
 
     def get_data(self) -> pd.DataFrame:
-        all_years_file_path = os.path.join(data_dir, f"{str(self.positionCategory)[17:]}_{self.start_year}_{self.end_year}.pkl")
-        if os.path.exists(all_years_file_path):
+        all_years_file_path = DATA_DIR / f"{str(self.positionCategory)[17:]}_{self.start_year}_{self.end_year}.pkl"
+        if all_years_file_path.exists():
             return pd.read_pickle(all_years_file_path)
         
         all_data = []
         for year in range(self.start_year, self.end_year + 1):
-            single_year_path = os.path.join(data_dir, f"{str(self.positionCategory)[17:]}_{year}.pkl")
-            if os.path.exists(single_year_path):
+            single_year_path = DATA_DIR / f"{str(self.positionCategory)[17:]}_{year}.pkl"
+            if single_year_path.exists():
                 df = pd.read_pickle(single_year_path)
                 all_data.append(df)
                 continue

@@ -3,13 +3,14 @@ fdp_venv/
 djangotutorial/
 old_points_predictors/
 models/
+stats_category_models/
 __pycache__/
 .[!.]*/
 training_results/
 player_data/
-
-
-
+fdp2.egg-info/
+debug/
+predictions/
 
 # Temporary files
 *.pyc

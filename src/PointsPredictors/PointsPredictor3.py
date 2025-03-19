@@ -1,25 +1,20 @@
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-training_dir = "training_results"
-models = "models" 
-os.makedirs(models, exist_ok=True)
-os.makedirs(training_dir, exist_ok=True)
-
-from DataProcessing.DataProcessing import WeightedDatasetSplit
-from DataProcessing.BatterDataProcessing import BatterDataProcessing
-from DataProcessing.StarterDataProcessing import StarterDataProcessing
-from DataProcessing.RelieverDataProcessing import RelieverDataProcessing
-from DataProcessing.DataPipelines import TrainingDataPrep, PredictionDataPrep, LeagueType
-from FangraphsScraper.fangraphsScraper import PositionCategory  
-from enum import Enum
+from ..DataProcessing.DataProcessing import WeightedDatasetSplit
+from ..DataProcessing.BatterDataProcessing import BatterDataProcessing
+from ..DataProcessing.StarterDataProcessing import StarterDataProcessing
+from ..DataProcessing.RelieverDataProcessing import RelieverDataProcessing
+from ..DataProcessing.DataPipelines import TrainingDataPrep, PredictionDataPrep, LeagueType
+from ..FangraphsScraper.fangraphsScraper import PositionCategory  
 import pandas as pd
 import numpy as np
 from typing import List, Union
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+
+from config import TRAINING_DIR, MODELS_DIR
 
 STARTER_PARAMS = {
                 'n_estimators': [430],
@@ -102,7 +97,7 @@ class Model():
 
             grid_search.fit(X_train, y_train)
             best_model = grid_search.best_estimator_
-            with open(os.path.join(training_dir, "best_hyperparams.txt"), "a") as f:
+            with open((TRAINING_DIR / "best_hyperparams.txt"), "a") as f:
                 f.write(f"Best hyperparameters: {grid_search.best_params_}\n")
                 f.write(f"Best R² Score: {grid_search.best_score_}\n\n")
             print(f"Best hyperparameters: {grid_search.best_params_}\n")
@@ -287,7 +282,7 @@ def main():
     processed_windows = data_prep.prepare_data()
 
     # Print all data to file
-    with open(os.path.join(training_dir,'batter_data.txt'), 'w') as f:
+    with open((TRAINING_DIR / 'batter_data.txt'), 'w') as f:
         for i, window in enumerate(processed_windows):
             f.write(f"\n{'='*80}\n")
             f.write(f"Window {i+1}:\n")
@@ -310,13 +305,13 @@ def main():
 
     # Save trained model
     print("Saving model...\n")
-    Model.save_trained_model(model, os.path.join(models,"batter_model.json"))
+    Model.save_trained_model(model, (MODELS_DIR / "batter_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
     tested_windows = batter_model.predict_model(model, processed_windows)
 
-    with open(os.path.join(training_dir,"batter_predictions.txt"), "w") as f:
+    with open((TRAINING_DIR /"batter_predictions.txt"), "w") as f:
         # Track overall metrics
         all_metrics = []
         
@@ -378,7 +373,7 @@ def main():
     processed_windows = data_processor.prepare_data()
 
     # Print all data to file
-    with open(os.path.join(training_dir,'starter_data.txt'), 'w') as f:
+    with open((TRAINING_DIR / 'starter_data.txt'), 'w') as f:
         for i, window in enumerate(processed_windows):
             f.write(f"\n{'='*80}\n")
             f.write(f"Window {i+1}:\n")
@@ -401,13 +396,13 @@ def main():
 
     # Save trained model
     print("Saving model...\n")
-    Model.save_trained_model(model, os.path.join(models,"starter_model.json"))
+    Model.save_trained_model(model, (MODELS_DIR / "starter_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
     tested_windows = starter_model.predict_model(model, processed_windows)
 
-    with open(os.path.join(training_dir,"starter_predictions.txt"), "w") as f:
+    with open((TRAINING_DIR / "starter_predictions.txt"), "w") as f:
         # Track overall metrics
         all_metrics = []
         
@@ -469,7 +464,7 @@ def main():
     processed_windows = data_processor.prepare_data()
 
     # Print all data to file
-    with open(os.path.join(training_dir,'reliever_data.txt'), 'w') as f:
+    with open((TRAINING_DIR / 'reliever_data.txt'), 'w') as f:
         for i, window in enumerate(processed_windows):
             f.write(f"\n{'='*80}\n")
             f.write(f"Window {i+1}:\n")
@@ -492,13 +487,13 @@ def main():
 
     # Save trained model
     print("Saving model...\n")
-    Model.save_trained_model(model, os.path.join(models,"reliever_model.json"))
+    Model.save_trained_model(model,(MODELS_DIR / "reliever_model.json"))
 
     # Make predictions for each window
     print("Making predictions...\n")
     tested_windows = reliever_model.predict_model(model, processed_windows)
 
-    with open(os.path.join(training_dir,"reliever_predictions.txt"), "w") as f:
+    with open((TRAINING_DIR / "reliever_predictions.txt"), "w") as f:
         # Track overall metrics
         all_metrics = []
         
