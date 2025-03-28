@@ -23,15 +23,16 @@ class StarterDataProcessing(DataProcessing):
         Selects relevant columns for starter analysis and reshapes data
         for year-by-year comparison.
         """
+        
         desired_columns = [
             'PlayerName', 'Age', 'Year', 'IP', 'ERA', 'FIP', 'xFIP', 'SIERA', 
             'K/9', 'BB/9', 'HR/9', 'BABIP', 'LOB%', 'GB%', 'HR/FB', 'K%', 'BB%', 
             'HBP', 'xERA', 'SO', 'BB', 'HR', 'ER', 'W', 'L', 'H','Barrel%', 
             'HardHit%', 'EV', 'C+SwStr%', 'SwStr%', 'Soft%', 'Med%', 'Hard%',
-            'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'QS',
+            'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'QS'
         ]
-        self.data = self.data[desired_columns]
         
+        self.data = self.data[desired_columns]
         self.reshape_data()
 
     def calc_fantasy_points(self) -> None:
@@ -40,6 +41,7 @@ class StarterDataProcessing(DataProcessing):
         Uses standard fantasy scoring metrics for starters including
         IP, SO, W, ER, H, BB, and HBP.
         """
+      
         fantasy_points = {}
         
         for year in self.years:
@@ -70,4 +72,5 @@ class StarterDataProcessing(DataProcessing):
             List of column names representing counting stats to be removed
             during data normalization.
         """
+  
         return ['W', 'SO', 'ER', 'BB', 'H', 'HBP', 'IP']

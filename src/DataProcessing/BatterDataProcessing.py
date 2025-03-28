@@ -21,6 +21,7 @@ class BatterDataProcessing(DataProcessing):
 
     def _calc_net_stolen_bases(self) -> None:
         """Calculate net stolen bases (SB - CS) and add to dataframe."""
+  
         sb = self.data['SB']
         cs = self.data['CS']
         nsb = sb - cs
@@ -44,7 +45,6 @@ class BatterDataProcessing(DataProcessing):
             self.data,
             pd.Series(tb, name='TB', index=self.data.index)
         ], axis=1)
-
     
     def _calc_plate_discipline_score(self) -> None:
         """Calculate plate discipline score using multiple PCA components.
@@ -52,6 +52,7 @@ class BatterDataProcessing(DataProcessing):
         Creates a composite score from various plate discipline metrics using
         principal component analysis to reduce dimensionality.
         """
+
         plate_discipline_columns = [
             'O-Swing%', 'Z-Swing%', 'Swing%', 'O-Contact%', 
             'Z-Contact%', 'Contact%', 'Zone%', 'F-Strike%', 'SwStr%'
@@ -64,7 +65,7 @@ class BatterDataProcessing(DataProcessing):
             
         cols_to_invert = ['O-Swing%', 'SwStr%']
         available_cols_to_invert = [col for col in cols_to_invert if col in available_columns]
-        
+
         plate_disc_data = self.data[available_columns].copy()
         plate_disc_data = plate_disc_data.fillna(plate_disc_data.mean())
         
@@ -74,13 +75,14 @@ class BatterDataProcessing(DataProcessing):
             columns=available_columns
         )
         
+
         for col in available_cols_to_invert:
             plate_disc_data[col] = plate_disc_data[col] * -1
         
         n_components = min(3, len(available_columns))
         pca = PCA(n_components=n_components)
         X_pca = pca.fit_transform(plate_disc_data)
-        
+
         if n_components == 3:
             composite = 0.60 * X_pca[:, 0] + 0.30 * X_pca[:, 1] + 0.10 * X_pca[:, 2]
         elif n_components == 2:
@@ -90,7 +92,7 @@ class BatterDataProcessing(DataProcessing):
         
         composite_min, composite_max = composite.min(), composite.max()
         plate_disc_score = (composite - composite_min) / (composite_max - composite_min) * 100
-        
+
         self.data = pd.concat([
             self.data,
             pd.Series(plate_disc_score, name='PlateDisciplineScore', index=self.data.index)
@@ -105,7 +107,7 @@ class BatterDataProcessing(DataProcessing):
         self._calc_plate_discipline_score()
         self._calc_net_stolen_bases()
         self._calc_tb()
-
+        
         desired_columns = [
             'PlayerName', 'Age', 'Year', 'G', 'AVG', 'OBP', 'SLG', 'wOBA', 'wRC+', 
             'H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'NSB',
@@ -126,6 +128,7 @@ class BatterDataProcessing(DataProcessing):
         singles, doubles, triples, home runs, runs, RBIs, stolen bases,
         and hit by pitch.
         """
+
         fantasy_points = {}
         
         for year in self.years:

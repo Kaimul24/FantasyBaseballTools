@@ -6,6 +6,7 @@ from enum import Enum
 from sklearn.impute import KNNImputer
 from typing import List, TypedDict, Dict, Set, Optional, Union, Any
 
+
 class DatasetSplit(TypedDict):
     train_years: List[int]
     test_year: int
@@ -31,6 +32,7 @@ class DataProcessing(ABC):
     This class handles common data processing functions and defines abstract methods
     that should be implemented by position-specific subclasses.
     """
+    
     def __init__(self, position_category: PositionCategory, league_type: LeagueType = LeagueType.POINTS, start_year: int = 2019, end_year: int = 2024) -> None:
         """
         Initialize the DataProcessing object.
@@ -41,6 +43,7 @@ class DataProcessing(ABC):
             start_year: The earliest year of data to retrieve
             end_year: The latest year of data to retrieve
         """
+        
         self.position_category = position_category
         data = FangraphsScraper(position_category, start_year=start_year, end_year=end_year).get_data()
         self.data = data[data['Year'] != 2020]
@@ -111,8 +114,7 @@ class DataProcessing(ABC):
         reshaped_data = []
         
         for player, player_data in self.data.groupby('PlayerName'):
-            player_dict = {'PlayerName': player}
-            
+            player_dict = {'PlayerName': player}  
             for year in self.years:
                 year_data = player_data[player_data['Year'] == year]
                 if not year_data.empty:
@@ -125,7 +127,6 @@ class DataProcessing(ABC):
                     for stat in all_possible_stats:
                         if stat not in year_data.columns and stat != 'Year':
                             player_dict[f"{year}_{stat}"] = np.nan
-                
                 else:
                     for stat in all_possible_stats:
                         if stat != 'Year':
@@ -136,21 +137,19 @@ class DataProcessing(ABC):
         df = pd.DataFrame(reshaped_data)
         
         player_names = df['PlayerName']
-        
+
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         
         print(f"Missing values before imputation: {df[numeric_cols].isna().sum().sum()}")
         
+
         imputer = KNNImputer(n_neighbors=5, weights='distance')
-        
         imputed_data = imputer.fit_transform(df[numeric_cols])
-        
         imputed_df = pd.DataFrame(imputed_data, columns=numeric_cols, index=df.index)
         
         print(f"Missing values after imputation: {imputed_df.isna().sum().sum()}")
-        
+
         imputed_df.insert(0, 'PlayerName', player_names)
-        
         year_groups = []
         for year in self.years:
             year_cols = [col for col in imputed_df.columns if str(year) in col]
@@ -158,7 +157,7 @@ class DataProcessing(ABC):
         
         final_cols = ['PlayerName'] + year_groups
         self.data = imputed_df[final_cols]
-        
+
         stats_added = {}
         for year in self.years:
             year_str = str(year)
@@ -185,7 +184,7 @@ class DataProcessing(ABC):
             The same list of windows with renamed columns in test_data and weighted_data
         """
         for window in windows:
-            
+
             test_year = str(window['test_year'])
             test_cols = window['test_data'].columns
             test_rename = {
@@ -214,6 +213,7 @@ class DataProcessing(ABC):
         Returns:
             DataFrame with filtered data and calculated fantasy points
         """
+
         self.filter_data()
         self.calc_fantasy_points()
         

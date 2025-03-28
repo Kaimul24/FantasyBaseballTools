@@ -32,6 +32,7 @@ class BaseDataPrep(ABC):
     def apply_weights(self, dataset_data: Union[List[DatasetSplit], PredictionDataset]) -> Union[List[WeightedDatasetSplit], PredictionDataset]:
         """
         Apply weights to the datasets based on years.
+
         For 3 years: 45% recent year, 32.5% recent year - 1, 22.5% recent year - 2.
         
         Args:
@@ -60,12 +61,13 @@ class BaseDataPrep(ABC):
         train_data = dataset['train_data'].copy()
         train_years = sorted(dataset.get('train_years', []))
         
+
         weighted_data_base = pd.DataFrame({'PlayerName': train_data['PlayerName'].unique()})
         
         year_prefix = f"{train_years[-1]}_"
         base_stats = [col.replace(year_prefix, '') for col in train_data.columns 
                      if year_prefix in col]
-        
+
         weighted_stats = {}
         
         for stat in base_stats:
@@ -89,15 +91,15 @@ class BaseDataPrep(ABC):
             if weights:
                 total_weight = sum(weights.values())
                 weights = {k: v/total_weight for k, v in weights.items()}
-            
+                
             for year_col, weight in weights.items():
                 if year_col in stat_data.columns:
                     weighted_stat += stat_data[year_col].fillna(0) * weight
             
+
             weighted_stats[stat] = weighted_stat
             
         weighted_stats_df = pd.DataFrame(weighted_stats, index=weighted_data_base.index)
-        
         weighted_data = pd.concat([weighted_data_base, weighted_stats_df], axis=1)
         
         result = dataset.copy()
@@ -248,9 +250,6 @@ class TrainingDataPrep(BaseDataPrep):
             train_years = window['train_years']
             test_year = window['test_year']
             
-            train_cols = [col for col in self.data.columns if any(str(year) in col for year in train_years)]
-            test_cols = [col for col in self.data.columns if str(test_year) in col]
-            
             if test_cols:
                 dataset = {
                     'train_years': train_years,
@@ -281,7 +280,7 @@ class PredictionDataPrep(BaseDataPrep):
         years = sorted([int(col.split('_')[0]) 
                        for col in self.data.columns 
                        if '_' in col and col.split('_')[0].isdigit()])
-        
+
         recent_years = sorted(set(years))
         
         if len(recent_years) < 3:
@@ -296,7 +295,7 @@ class PredictionDataPrep(BaseDataPrep):
         
         train_cols = [col for col in self.data.columns 
                      if any(str(year) in col for year in prediction_window['train_years'])]
-        
+
         prediction_data = {
             'train_years': prediction_window['train_years'],
             'prediction_year': prediction_window['prediction_year'],

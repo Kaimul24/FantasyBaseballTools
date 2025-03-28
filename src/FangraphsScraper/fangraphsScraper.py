@@ -25,6 +25,7 @@ class FangraphsScraper:
         Retrieves the statistics data and returns it as a pandas DataFrame.
 
     '''
+
     def __init__(self, position_category: PositionCategory, start_year: int = 2024, end_year: int = 2024) -> None:
         """
         Initialize a FangraphsScraper instance.
@@ -43,10 +44,10 @@ class FangraphsScraper:
         ValueError
             If an invalid position category is provided.
         """
+      
         self.positionCategory = position_category
         self.start_year = start_year
         self.end_year = end_year
-
         self.base_urls = {
             PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=100',
             PositionCategory.SP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&type=5&season={}&month=0&season1={}&ind=0&stats=sta&qual=60&pagenum=1&pageitems=2000000000',
@@ -125,6 +126,7 @@ class FangraphsScraper:
         ValueError
             If no data is found for any year in the specified range.
         """
+      
         all_years_file_path = DATA_DIR / f"{str(self.positionCategory)[17:]}_{self.start_year}_{self.end_year}.pkl"
         if all_years_file_path.exists():
             return pd.read_pickle(all_years_file_path)
@@ -151,7 +153,6 @@ class FangraphsScraper:
         
         common_columns = set.intersection(*[set(df.columns) for df in all_data])
         all_data = [df[list(common_columns)] for df in all_data]
-        
         all_dfs = pd.concat(all_data, ignore_index=True)
         all_dfs.to_pickle(all_years_file_path)
         return all_dfs
@@ -162,3 +163,4 @@ if __name__ == "__main__":
     cols = list(df.columns)
     with open("cols_SP.txt", "w") as f:        
         print(cols, file=f)
+

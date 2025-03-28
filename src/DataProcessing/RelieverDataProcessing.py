@@ -54,6 +54,7 @@ class RelieverDataProcessing(DataProcessing):
         Uses standard fantasy scoring metrics for relievers including
         IP, SO, SV, HLD, ER, H, BB, and HBP.
         """
+        
         fantasy_points = {}
         
         for year in self.years:
@@ -71,7 +72,7 @@ class RelieverDataProcessing(DataProcessing):
                     self.data[f'{year_str}_BB'] * -0.9 +
                     self.data[f'{year_str}_HBP'] * -0.9
                 )
-        
+
         if fantasy_points:
             self.data = pd.concat([
                 self.data,
