@@ -2,71 +2,65 @@
 
 ## Overview
 
-This project aims to predict fantasy baseball points for MLB players using historical statistics and machine learning techniques. It includes data scraping, processing, model training, and prediction components, focusing on three main player categories: Batters, Starting Pitchers (SP), and Relief Pitchers (RP).
+This project predicts fantasy baseball points for MLB players using historical statistics and machine learning techniques. It features a comprehensive pipeline including data retrieval from Fangraphs, data processing, model training, and prediction generation for three main player categories: Batters, Starting Pitchers (SP), and Relief Pitchers (RP).
 
 ## Project Structure
 
-The codebase is organized into several modules, each responsible for a specific aspect of the prediction pipeline:
+The codebase is organized into several modules, each handling a specific aspect of the prediction pipeline:
 
--   **PointsPredictors**: Contains the main scripts for training models and making predictions.
--   **DataProcessing**: Includes modules for data scraping, cleaning, and feature engineering.
--   **FangraphsScraper**: Provides functionality to scrape data from Fangraphs.
--   **StatCategoryPredictions**: Includes scripts for predicting stat categories.
--   **tests**: Contains unit tests for various modules.
+-   **FangraphsScraper**: Retrieves player statistics from Fangraphs.
+-   **DataProcessing**: Handles data cleaning, transformation, and feature engineering.
+-   **ModelTraining**: Trains models for points and individual stats, and then predicts future points and stats.
+-   **tests**: Contains unit tests for various components.
 
 ## Key Components
 
 ### 1. Data Scraping (`FangraphsScraper`)
 
--   `fangraphsScraper.py`: Scrapes player statistics from Fangraphs based on position category (Batter, SP, RP) and year range.
-    -   Uses `requests` and `lxml` to fetch and parse HTML content.
-    -   Caches scraped data to pickle files for efficiency.
-    -   Defines `PositionCategory` enum to specify player positions.
+-   `fangraphsScraper.py`: Scrapes player statistics from Fangraphs.
+    -   Implements the `PositionCategory` enum to categorize players as Batters, SP, or RP.
+    -   Uses `requests` and `lxml` to fetch and parse HTML content from Fangraphs.
+    -   Extracts player data from embedded JSON in the page's HTML.
+    -   Caches scraped data to pickle files for improved efficiency.
+    -   Supports data collection across multiple seasons.
 
 ### 2. Data Processing (`DataProcessing`)
 
--   `DataProcessing.py`: Abstract base class for data processing, defining common methods and abstract methods for position-specific subclasses.
-    -   Handles data filtering, reshaping, and imputation of missing values using KNN imputation.
-    -   Defines data structures for dataset splits (`DatasetSplit`, `WeightedDatasetSplit`, `PredictionDataset`).
--   `BatterDataProcessing.py`, `StarterDataProcessing.py`, `RelieverDataProcessing.py`: Concrete implementations for each position category, inheriting from `DataProcessing`.
-    -   Implement abstract methods for data filtering, fantasy points calculation, and counting stats retrieval.
-    -   `BatterDataProcessing` includes plate discipline score calculation using PCA.
--   `DataPipelines.py`: Defines data pipelines for training and prediction, including dataset creation, weighting, and formatting.
-    -   `TrainingDataPrep` creates rolling train/validation/test splits.
-    -   `PredictionDataPrep` prepares data for future predictions.
+-   `DataProcessing.py`: Abstract base class defining the data processing pipeline.
+    -   Handles data filtering, reshaping, and missing value imputation.
+    -   Defines data structures for dataset management.
+-   Position-specific implementations:
+    -   `BatterDataProcessing.py`: Processing for batting statistics.
+    -   `StarterDataProcessing.py`: Processing for starting pitcher statistics.
+    -   `RelieverDataProcessing.py`: Processing for relief pitcher statistics.
+-   `DataPipelines.py`: Creates training and prediction pipelines.
+    -   `TrainingDataPrep`: Creates train/validation/test splits.
+    -   `PredictionDataPrep`: Prepares data for future predictions.
 
-### 3. Model Training and Prediction (`PointsPredictors`)
+### 3. Model Training and Prediction (`ModelPredictions`)
 
--   `PointsPredictor3.py`: Main script for training and evaluating prediction models.
-    -   Loads and preprocesses data using `DataProcessing` modules.
-    -   Trains XGBoost models for each position category.
-    -   Performs hyperparameter tuning using `GridSearchCV`.
-    -   Calculates and saves model performance metrics (RMSE, MAE, R², percent difference).
-    -   Saves trained models to JSON files.
--   `Predict2025.py`: Script for making predictions for the 2025 season using pre-trained models.
-    -   Loads trained XGBoost models.
-    -   Prepares prediction data using `PredictionDataPrep`.
-    -   Generates and saves predictions to CSV files.
--   `Model`: Class that handles model training, hyperparameter tuning, prediction, and evaluation.
-    -   Uses `xgboost` for model training.
-    -   Calculates performance metrics such as RMSE, MAE, and R².
-    -   Saves trained models for future use.
+-   `ModelTraining.py`: Main script for training prediction models.
+    -   Uses XGBoost for regression modeling
+    -   Performs hyperparameter tuning.
+    -   Calculates performance metrics (RMSE, MAE, R²).
+    -   Saves trained models for later use.
+-   `PredictFutureYear.py`: Generates predictions for upcoming seasons.
+    -   Loads pre-trained models.
+    -   Processes current player data.
+    -   Outputs predictions in CSV format.
+-   `Model`: Core class implementing training, evaluation, and prediction functionality.
 
-### 4. Stat Category Predictions (`StatCategoryPredictions`)
-
--   `CategoryPredictions.py`: Script for predicting specific stat categories (e.g., HR) using a similar pipeline as `PointsPredictor3.py`.
-    -   Trains and evaluates models for predicting stat categories instead of total points.
 
 ## Usage
 
 ### 1. Data Scraping
 
-To scrape data from Fangraphs, use the `FangraphsScraper` class:
+To scrape data from Fangraphs:
 
 ```python
-from FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
+from src.FangraphsScraper.fangraphsScraper import FangraphsScraper, PositionCategory
 
-# Example: Scraping data for starting pitchers from 2019 to 2024
+# Example: Scrape data for starting pitchers from 2019 to 2024
 scraper = FangraphsScraper(PositionCategory.SP, start_year=2019, end_year=2024)
 data = scraper.get_data()
 print(data.head())
@@ -74,67 +68,52 @@ print(data.head())
 
 ### 2. Model Training
 
-To train a model, run the `PointsPredictor3.py` script:
+To train prediction models:
 
 ```bash
-python PointsPredictors/PointsPredictor3.py
+python3 -m src.ModelPrediction/ModelTraining
 ```
 
-This script will:
-
--   Load and preprocess data for Batters, Starting Pitchers, and Relief Pitchers.
--   Train XGBoost models for each position category.
--   Save the trained models to the `models` directory.
--   Output performance metrics to the console and save detailed results to the `training_results` directory.
+This will:
+-   Load and process data for all player categories
+-   Train XGBoost models with optimized hyperparameters for individual stats and points
+-   Save models to the `models` directory
+-   Output performance metrics and detailed results
 
 ### 3. Making Predictions
 
-To make predictions for the 2025 season, run the `Predict2025.py` script:
+To generate predictions for future seasons:
 
 ```bash
-python PointsPredictors/Predict2025.py
+python3 -m src.ModelPrediction/PredictFutureYear
 ```
 
-This script will:
-
--   Load the trained models from the `models` directory.
--   Prepare prediction data for 2025.
--   Generate predictions for each position category.
--   Save the predictions to CSV files in the `predictions_2025` directory.
-
-### 4. Stat Category Predictions TODO
-
-To predict specific stat categories, run the `CategoryPredictions.py` script:
-
-```bash
-python StatCategoryPredictions/CategoryPredictions.py
-```
-
-This script will:
-
--   Load and preprocess data for Batters.
--   Train an XGBoost model for predicting a specific stat category (e.g., HR).
--   Save the trained model and output performance metrics.
+This will:
+-   Load trained models
+-   Prepare current player data
+-   Generate and save predictions as CSV files for individual stats and points
 
 ## Dependencies
 
 -   pandas
 -   numpy
--   xgboost
 -   scikit-learn
+-   xgboost
 -   lxml
 -   requests
 
-To install the dependencies, use the following command:
+To install all dependencies:
 
 ```bash
-pip install pandas numpy xgboost scikit-learn lxml requests
+pip install -e .
 ```
 
 ## Tests
 
-The `tests` directory contains unit tests for various modules. To run the tests, use `pytest`:
+Run the test suite using pytest:
 
 ```bash
 pytest tests
 ```
+
+The test suite includes unit tests for the FangraphsScraper and other components.

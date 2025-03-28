@@ -25,14 +25,28 @@ class FangraphsScraper:
         Retrieves the statistics data and returns it as a pandas DataFrame.
 
     '''
-    def __init__(self, position_category: PositionCategory, start_year: int = 2024, end_year: int = 2024):
+    def __init__(self, position_category: PositionCategory, start_year: int = 2024, end_year: int = 2024) -> None:
+        """
+        Initialize a FangraphsScraper instance.
+        
+        Parameters
+        ----------
+        position_category : PositionCategory
+            The category of players to scrape (BATTER, SP, or RP).
+        start_year : int, optional
+            The starting year for data collection, by default 2024.
+        end_year : int, optional
+            The ending year for data collection, by default 2024.
+        
+        Raises
+        ------
+        ValueError
+            If an invalid position category is provided.
+        """
         self.positionCategory = position_category
         self.start_year = start_year
         self.end_year = end_year
 
-        
-
-        ## QUAL TO BE CHANGED
         self.base_urls = {
             PositionCategory.BATTER: 'https://www.fangraphs.com/leaders/major-league?pos=all&stats=bat&lg=all&type=8&season={}&month=0&season1={}&ind=0&pageitems=2000000000&qual=100',
             PositionCategory.SP: 'https://www.fangraphs.com/leaders/major-league?pos=all&lg=all&type=5&season={}&month=0&season1={}&ind=0&stats=sta&qual=60&pagenum=1&pageitems=2000000000',
@@ -42,20 +56,33 @@ class FangraphsScraper:
         if position_category not in self.base_urls:
             raise ValueError("Invalid Position Category")
 
-    def _get_page(self, year: int)-> list: 
+    def _get_page(self, year: int) -> list:
         """
         Fetches and parses the HTML content of the page specified by the instance's URL.
+        
         This method sends a GET request to the URL, parses the HTML content to extract
         a JSON script, and navigates through the JSON structure to retrieve player data.
-        Returns:
-            list: A list of statistical data extracted from the page. If no relevant
-                  data is found, an empty list is returned.
+        
+        Parameters
+        ----------
+        year : int
+            The year for which to fetch data.
+            
+        Returns
+        -------
+        list
+            A list of statistical data extracted from the page. If no relevant
+            data is found, an empty list is returned.
+            
+        Raises
+        ------
+        ValueError
+            If JSON parsing fails or if no relevant query is found in the data.
         """
-
         self.url = self.base_urls[self.positionCategory].format(year, year)
         response = requests.get(self.url)
         if response.status_code != 200:
-            return []  # Return empty list instead of raising exception
+            return []
         
         tree = html.fromstring(response.text)
 
@@ -80,13 +107,24 @@ class FangraphsScraper:
         stats = data.get("data", [])
         return stats
     
-    """
-    Calls _get_page() to retrieve the statistical data from the Fangraphs page.
-    Returns:
-        pandas.DataFrame: A DataFrame containing the statistical data.
-    """
-
     def get_data(self) -> pd.DataFrame:
+        """
+        Retrieve statistical data from Fangraphs.
+        
+        Calls _get_page() to retrieve the statistical data from the Fangraphs page.
+        If data for the requested years has been previously saved, it will be loaded
+        from disk instead of re-scraping.
+        
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the statistical data.
+        
+        Raises
+        ------
+        ValueError
+            If no data is found for any year in the specified range.
+        """
         all_years_file_path = DATA_DIR / f"{str(self.positionCategory)[17:]}_{self.start_year}_{self.end_year}.pkl"
         if all_years_file_path.exists():
             return pd.read_pickle(all_years_file_path)
@@ -103,9 +141,7 @@ class FangraphsScraper:
             if stats_data:
                 df = pd.DataFrame(stats_data)
                 df['Year'] = year
-                # Remove columns with all NA values
                 df = df.dropna(axis=1, how='all')
-                # Remove empty columns
                 df = df.loc[:, df.notna().any()]
                 all_data.append(df)
                 df.to_pickle(single_year_path)
@@ -113,19 +149,16 @@ class FangraphsScraper:
         if not all_data:
             raise ValueError("No data found for any year")
         
-        # Ensure all DataFrames have same columns
         common_columns = set.intersection(*[set(df.columns) for df in all_data])
         all_data = [df[list(common_columns)] for df in all_data]
         
-
         all_dfs = pd.concat(all_data, ignore_index=True)
         all_dfs.to_pickle(all_years_file_path)
         return all_dfs
 
 if __name__ == "__main__":
-    scraper = FangraphsScraper(PositionCategory.BATTER, 2019, 2019)    
+    scraper = FangraphsScraper(PositionCategory.SP, 2019, 2019)    
     df = scraper.get_data()    
     cols = list(df.columns)
-    with open("cols_batter.txt", "w") as f:        
+    with open("cols_SP.txt", "w") as f:        
         print(cols, file=f)
-        
