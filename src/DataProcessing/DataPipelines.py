@@ -249,6 +249,9 @@ class TrainingDataPrep(BaseDataPrep):
         for window in windows:
             train_years = window['train_years']
             test_year = window['test_year']
+
+            train_cols = [col for col in self.data.columns if any(str(year) in col for year in train_years)]
+            test_cols = [col for col in self.data.columns if str(test_year) in col]
             
             if test_cols:
                 dataset = {
