@@ -1,18 +1,29 @@
-from ..DataProcessing.DataProcessing import DataProcessing
+from ..DataProcessing.DataProcessing import DataProcessing, LeagueType
 from ..FangraphsScraper.fangraphsScraper import PositionCategory
 import pandas as pd
-import numpy as np
-from typing import List
+from typing import List, Dict, Optional
 
 class StarterDataProcessing(DataProcessing):
     """Concrete implementation for starting pitcher data processing"""
     
-    def __init__(self, start_year: int = 2019, end_year: int = 2024):
-        super().__init__(PositionCategory.SP, start_year, end_year)
+    def __init__(self, league_type: LeagueType, start_year: int = 2019, end_year: int = 2024) -> None:
+        """Initialize the starter data processor.
+        
+        Args:
+            league_type: Type of league for processing
+            start_year: Starting year for data collection
+            end_year: Ending year for data collection
+        """
+        super().__init__(PositionCategory.SP, league_type, start_year, end_year)
+        self.stat_categories = ['ERA', 'WHIP', 'QS']
     
-    def filter_data(self):
-        """Filter and reshape the data for starting pitchers"""
-        # Define columns we want to keep if they exist
+    def filter_data(self) -> None:
+        """Filter and reshape the data for starting pitchers.
+        
+        Selects relevant columns for starter analysis and reshapes data
+        for year-by-year comparison.
+        """
+        
         desired_columns = [
             'PlayerName', 'Age', 'Year', 'IP', 'ERA', 'FIP', 'xFIP', 'SIERA', 
             'K/9', 'BB/9', 'HR/9', 'BABIP', 'LOB%', 'GB%', 'HR/FB', 'K%', 'BB%', 
@@ -20,13 +31,17 @@ class StarterDataProcessing(DataProcessing):
             'HardHit%', 'EV', 'C+SwStr%', 'SwStr%', 'Soft%', 'Med%', 'Hard%',
             'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'QS'
         ]
-        self.data = self.data[desired_columns]
         
+        self.data = self.data[desired_columns]
         self.reshape_data()
 
-    def calc_fantasy_points(self):
-        """Calculate fantasy points for starting pitchers"""
-        # Create dictionary to store fantasy points for each year
+    def calc_fantasy_points(self) -> None:
+        """Calculate fantasy points for starting pitchers.
+        
+        Uses standard fantasy scoring metrics for starters including
+        IP, SO, W, ER, H, BB, and HBP.
+        """
+      
         fantasy_points = {}
         
         for year in self.years:
@@ -34,18 +49,16 @@ class StarterDataProcessing(DataProcessing):
             stats_to_check = ['W', 'SO', 'ER', 'BB', 'H', 'HBP', 'IP']
             
             if all(f'{year_str}_{stat}' in self.data.columns for stat in stats_to_check):
-                # Common fantasy scoring for pitchers (adjust as needed)
                 fantasy_points[f'{year_str}_TotalPoints'] = (
-                    self.data[f'{year_str}_IP'] * 3.35 +     # Points per out
-                    self.data[f'{year_str}_SO'] * 3.35 +      # Points per strikeout
-                    self.data[f'{year_str}_W'] * 8.35 +      # Points per win
-                    self.data[f'{year_str}_ER'] * -2.55 +    # Negative points for earned runs
-                    self.data[f'{year_str}_H'] * -0.85 +   # Negative points for hits
-                    self.data[f'{year_str}_BB'] * -0.85 +   # Negative points for walks
-                    self.data[f'{year_str}_HBP'] * -0.85   # Negative points for hit by pitch
+                    self.data[f'{year_str}_IP'] * 3.35 +
+                    self.data[f'{year_str}_SO'] * 3.35 +
+                    self.data[f'{year_str}_W'] * 8.35 +
+                    self.data[f'{year_str}_ER'] * -2.55 +
+                    self.data[f'{year_str}_H'] * -0.85 +
+                    self.data[f'{year_str}_BB'] * -0.85 +
+                    self.data[f'{year_str}_HBP'] * -0.85
                 )
         
-        # Concatenate all fantasy points columns at once
         if fantasy_points:
             self.data = pd.concat([
                 self.data,
@@ -53,5 +66,11 @@ class StarterDataProcessing(DataProcessing):
             ], axis=1)
     
     def get_counting_stats(self) -> List[str]:
-        """Return a list of counting stats to remove for starters"""
+        """Return a list of counting stats for starters.
+        
+        Returns:
+            List of column names representing counting stats to be removed
+            during data normalization.
+        """
+  
         return ['W', 'SO', 'ER', 'BB', 'H', 'HBP', 'IP']
