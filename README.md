@@ -1,8 +1,8 @@
-# Fantasy Baseball Points Prediction Project
+# Fantasy Baseball Prediction Project
 
 ## Overview
 
-This project predicts fantasy baseball points for MLB players using historical statistics and machine learning techniques. It features a comprehensive pipeline including data retrieval from Fangraphs, data processing, model training, and prediction generation for three main player categories: Batters, Starting Pitchers (SP), and Relief Pitchers (RP).
+This project predicts fantasy baseball points and individual for MLB players using historical statistics in tandem with machine learning. It features a comprehensive pipeline including data retrieval from Fangraphs, data processing, model training, and prediction generation for three main player categories: Batters, Starting Pitchers (SP), and Relief Pitchers (RP).
 
 ## Project Structure
 
