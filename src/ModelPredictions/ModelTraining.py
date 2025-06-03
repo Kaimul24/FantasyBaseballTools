@@ -452,11 +452,9 @@ def train_category_models(position_type: PositionCategory, start_year: int = 201
     train_and_evaluate_model(position_type, LeagueType.CATEGORIES, start_year, end_year)
 
 def main():
-    # Train points models for all position types
     for position_type in PositionCategory:
         train_and_evaluate_model(position_type, LeagueType.POINTS)
     
-    # Train category models for all position types
     for position_type in PositionCategory:
         train_and_evaluate_model(position_type, LeagueType.CATEGORIES)
 

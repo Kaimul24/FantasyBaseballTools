@@ -113,7 +113,7 @@ class BatterDataProcessing(DataProcessing):
             'H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'BB%', 'K%', 'ISO', 'SB', 'CS', 'NSB',
             'HR/FB', 'GB/FB', 'LD%', 'GB%', 'FB%', 'xwOBA', 'xAVG', 'xSLG', 'EV', 'LA',
             'Barrel%', 'HardHit%', 'PlateDisciplineScore', 'BaseRunning', 'BABIP', 'Pull%',
-            'Cent%', 'Oppo%', 'BB/K', 'Offense', 'WAR', 'OPS', 'SO', 'TB', 'wBsR'
+            'Cent%', 'Oppo%', 'BB/K', 'Offense',  'OPS', 'SO', 'TB', 'wBsR'
         ]
         
         available_columns = [col for col in desired_columns if col in self.data.columns]
@@ -150,6 +150,28 @@ class BatterDataProcessing(DataProcessing):
                 self.data,
                 pd.DataFrame(fantasy_points)
             ], axis=1)
+    
+    # Need to integrate injury history/games played
+    def normalize_counting_stats(self) -> None:
+        print("Normalizing counting stats...")
+        feature_cols = [col for col in self.data.columns if col != 'PlayerName']
+        
+        stats_to_normalize = ['H', 'HBP', '1B', '2B', '3B', 'HR', 'R', 'RBI', 'SB', 'CS', 'NSB', 'SO', 'TB']
+
+        for player, player_data in self.data.groupby('PlayerName'):
+            player_idx = player_data.index[0]
+            
+            for stat in feature_cols:
+                year = stat[:4]
+                base_stat = stat[5:]
+
+                if base_stat in stats_to_normalize:
+                    games = self.data.loc[player_idx, f'{year}_G']
+
+                    if not pd.isna(games) and games > 0:
+                        original_value = self.data.loc[player_idx, stat]
+                        normalized_value = (original_value / games) * 150
+                        self.data.loc[player_idx, stat] = normalized_value
     
     def get_counting_stats(self) -> List[str]:
         """Return a list of counting stats for batters.

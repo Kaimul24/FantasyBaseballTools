@@ -29,7 +29,7 @@ class RelieverDataProcessing(DataProcessing):
             'K/9', 'BB/9', 'HR/9', 'BABIP', 'LOB%', 'GB%', 'HR/FB', 'K%', 'BB%', 
             'HBP', 'xERA', 'SO', 'BB', 'H', 'HR', 'ER', 'SV', 'HLD', 'Barrel%', 
             'HardHit%', 'EV', 'C+SwStr%', 'SwStr%', 'Soft%', 'Med%', 'Hard%',
-            'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'BS', 'NSVH'
+            'K-BB%', 'WHIP', 'GB/FB', 'LD%', 'FB%', 'LA', 'WAR', 'BS', 'NSVH', 'G'
         ]
         
         self.data = self.data[desired_columns]
@@ -78,6 +78,27 @@ class RelieverDataProcessing(DataProcessing):
                 self.data,
                 pd.DataFrame(fantasy_points)
             ], axis=1)
+
+    def normalize_counting_stats(self) -> None:
+        print("Normalizing counting stats...")
+        feature_cols = [col for col in self.data.columns if col != 'PlayerName']
+        
+        stats_to_normalize = ['IP', 'HBP', 'SO', 'BB', 'HR', 'ER', 'H', 'WAR', 'SV', 'HLD', 'BS', 'NSVH']
+
+        for player, player_data in self.data.groupby('PlayerName'):
+            player_idx = player_data.index[0]
+            
+            for stat in feature_cols:
+                year = stat[:4]
+                base_stat = stat[5:]
+
+                if base_stat in stats_to_normalize:
+                    innings_pitched = self.data.loc[player_idx, f'{year}_IP']
+
+                    if not pd.isna(innings_pitched) and innings_pitched > 0:
+                        original_value = self.data.loc[player_idx, stat]
+                        normalized_value = (original_value / innings_pitched) * 65
+                        self.data.loc[player_idx, stat] = normalized_value
     
     def get_counting_stats(self) -> List[str]:
         """Return a list of counting stats for relievers.

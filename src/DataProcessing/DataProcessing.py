@@ -88,8 +88,19 @@ class DataProcessing(ABC):
             List of column names representing counting stats
         """
         pass
+
+    @abstractmethod
+    def normalize_counting_stats(self) -> None:
+        """
+        Normalizes the counting stats for each player to a standard level. 
+
+        This method needs to be implemented by subclasses to identify which 
+        metric to normalize by and which stats to normalize. 
+
+        """
+        pass
     
-    def reshape_data(self) -> pd.DataFrame:
+    def reshape_data(self) -> None:
         """
         Reshape data so each player has one row with columns grouped by year.
         
@@ -100,6 +111,7 @@ class DataProcessing(ABC):
         Returns:
             Reshaped and imputed DataFrame
         """
+
         feature_cols = [col for col in self.data.columns if col != 'PlayerName']
             
         all_possible_stats = set()
@@ -167,41 +179,8 @@ class DataProcessing(ABC):
         print("Stats per year after imputation:")
         for year, count in stats_added.items():
             print(f"  {year}: {count} stats")
-            
-        return self.data
+    
 
-    def remove_year_prefixes(self, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
-        """
-        Remove year prefixes from validation and test data columns.
-        
-        This function transforms column names by removing the year prefix from test data columns
-        and the 'weighted_' prefix from weighted data columns.
-        
-        Parameters:
-            windows: List of dataset splits with train, test, and weighted data
-            
-        Returns:
-            The same list of windows with renamed columns in test_data and weighted_data
-        """
-        for window in windows:
-
-            test_year = str(window['test_year'])
-            test_cols = window['test_data'].columns
-            test_rename = {
-                col: col.replace(f"{test_year}_", "") 
-                for col in test_cols 
-                if col.startswith(f"{test_year}_")
-            }
-            window['test_data'] = window['test_data'].rename(columns=test_rename)
-            
-            weighted_cols = window['weighted_data'].columns
-            weighted_rename = {
-                col: col.replace("weighted_", "") for col in weighted_cols 
-                if col.startswith("weighted_") and col != "PlayerName"
-            }
-            window['weighted_data'] = window['weighted_data'].rename(columns=weighted_rename)
-        
-        return windows
     
     def filter_and_calc_points(self) -> pd.DataFrame:
         """
@@ -215,5 +194,5 @@ class DataProcessing(ABC):
         """
 
         self.filter_data()
+        # self.normalize_counting_stats()
         self.calc_fantasy_points()
-        

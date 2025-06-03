@@ -19,7 +19,6 @@ predictions/
 *.log
 
 # Other files
-*.txt
 *.json
 *.csv
 *.png
