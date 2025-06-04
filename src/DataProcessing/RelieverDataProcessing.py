@@ -43,10 +43,7 @@ class RelieverDataProcessing(DataProcessing):
         bs = self.data["BS"]
 
         nsvh = sv - hld - bs
-        self.data = pd.concat([
-            self.data,
-            pd.Series(nsvh, name='NSVH', index=self.data.index)
-        ], axis=1)
+        self.data['NSVH'] = nsvh
 
     def calc_fantasy_points(self) -> None:
         """Calculate fantasy points for relief pitchers.
