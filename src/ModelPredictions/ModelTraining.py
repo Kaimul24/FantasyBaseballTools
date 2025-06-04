@@ -6,7 +6,8 @@ from ..DataProcessing.DataPipelines import TrainingDataPrep, PredictionDataPrep,
 from ..FangraphsScraper.fangraphsScraper import PositionCategory  
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Any, Tuple
+from typing import List, Dict, Union, Any, Tuple, cast
+from numpy.typing import ArrayLike
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
@@ -200,7 +201,7 @@ class Model:
         return model
     
     @staticmethod
-    def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    def calculate_metrics(y_true: ArrayLike, y_pred: ArrayLike) -> Dict[str, float]:
         """
         Calculate RMSE, MAE, and R² score for predictions.
         
@@ -230,7 +231,7 @@ class Model:
         }
         
     @staticmethod
-    def save_trained_model(model: xgb.XGBRegressor, filepath: str) -> None:
+    def save_trained_model(model: xgb.XGBRegressor, filepath: Path) -> None:
         """
         Save a trained XGBoost model to disk.
         
@@ -238,7 +239,7 @@ class Model:
             model: Trained XGBRegressor model
             filepath: Path where the model will be saved
         """
-        model.save_model(filepath)
+        model.save_model(str(filepath))
         print(f"Model successfully saved to {filepath}")
         
     def predict_model(self, model: xgb.XGBRegressor, windows: List[WeightedDatasetSplit]) -> List[WeightedDatasetSplit]:
@@ -335,7 +336,7 @@ def train_and_evaluate_model(position_type: PositionCategory, league_type: Leagu
         data_processor.filter_data()
     
     data_prep = TrainingDataPrep(data_processor)
-    processed_windows = data_prep.prepare_data()
+    processed_windows = cast(List[WeightedDatasetSplit], data_prep.prepare_data())
     
     with open((TRAINING_DIR / f'{position_type}_{league_type.name.lower()}_data.txt'), 'w') as f:
         for i, window in enumerate(processed_windows):
@@ -395,7 +396,8 @@ def _evaluate_and_write_predictions(tested_windows: List[WeightedDatasetSplit],
         all_metrics = []
         
         for i, window in enumerate(tested_windows):
-            if "predictions" not in window:
+            preds = window.get("predictions")
+            if preds is None:
                 f.write(f"Window {i+1}: No predictions available.\n")
                 continue
             
@@ -404,11 +406,11 @@ def _evaluate_and_write_predictions(tested_windows: List[WeightedDatasetSplit],
                 
             f.write(f"Window {i+1}:\n")
             f.write(f"Training years: {window['train_years']}, Test year: {window['test_year']}\n")
-            predictions = window["predictions"].copy()
+            predictions = preds.copy()
             
             metrics = Model.calculate_metrics(
-                predictions[f'actual_{category}'],
-                predictions[f'predicted_{category}']
+                predictions[f'actual_{category}'].values,
+                predictions[f'predicted_{category}'].values
             )
             all_metrics.append(metrics)
             

@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from enum import Enum
 from sklearn.impute import KNNImputer
-from typing import List, TypedDict, Dict, Set, Optional, Union, Any
+from typing import List, TypedDict, Dict, Set, Optional, Union, Any, NotRequired
 
 
 class DatasetSplit(TypedDict):
@@ -15,6 +15,8 @@ class DatasetSplit(TypedDict):
 
 class WeightedDatasetSplit(DatasetSplit):
     weighted_data: pd.DataFrame
+    model: NotRequired[Any]
+    predictions: NotRequired[pd.DataFrame]
 
 class PredictionDataset(TypedDict):
     train_years: List[int]

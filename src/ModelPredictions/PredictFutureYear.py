@@ -1,12 +1,12 @@
 from ..FangraphsScraper.fangraphsScraper import PositionCategory
 from ..DataProcessing.DataPipelines import PredictionDataPrep
-from ..DataProcessing.DataProcessing import LeagueType
+from ..DataProcessing.DataProcessing import LeagueType, PredictionDataset, WeightedDatasetSplit
 from ..DataProcessing.BatterDataProcessing import BatterDataProcessing
 from ..DataProcessing.StarterDataProcessing import StarterDataProcessing
 from ..DataProcessing.RelieverDataProcessing import RelieverDataProcessing
 import pandas as pd
 import xgboost as xgb
-from typing import Dict, Union
+from typing import Dict, Union, cast
 
 from config import PREDICTIONS_DIR, MODELS_DIR
 
@@ -39,12 +39,12 @@ class FuturePredictions:
         self.model.load_model(MODELS_DIR / model_name)
         print(f"Model successfully loaded from {model_name}")
     
-    def prepare_data(self) -> Dict:
+    def prepare_data(self) -> WeightedDatasetSplit:
         """
         Prepare data for making predictions by processing historical data.
         
         Returns:
-            Dictionary containing processed prediction data
+            Processed prediction data with weighted stats
         """
         position_map = {
             PositionCategory.BATTER: BatterDataProcessing,
@@ -67,7 +67,7 @@ class FuturePredictions:
             self.stat_categories = data_processor.stat_categories
         
         data_prep = PredictionDataPrep(data_processor)
-        processed_data = data_prep.prepare_data()
+        processed_data = cast(WeightedDatasetSplit, data_prep.prepare_data())
 
         return processed_data
     

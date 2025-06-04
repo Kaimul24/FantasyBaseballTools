@@ -25,10 +25,7 @@ class BatterDataProcessing(DataProcessing):
         sb = self.data['SB']
         cs = self.data['CS']
         nsb = sb - cs
-        self.data = pd.concat([
-            self.data,
-            pd.Series(nsb, name='NSB', index=self.data.index)
-        ], axis=1)
+        self.data['NSB'] = nsb
 
     def _calc_tb(self) -> None:
         """Calculate total bases and add to dataframe.
@@ -41,10 +38,7 @@ class BatterDataProcessing(DataProcessing):
         home_runs = self.data['HR']
         tb = singles + (2 * doubles) + (3 * triples) + (4 * home_runs)
 
-        self.data = pd.concat([
-            self.data,
-            pd.Series(tb, name='TB', index=self.data.index)
-        ], axis=1)
+        self.data['TB'] = tb
     
     def _calc_plate_discipline_score(self) -> None:
         """Calculate plate discipline score using multiple PCA components.
@@ -93,10 +87,7 @@ class BatterDataProcessing(DataProcessing):
         composite_min, composite_max = composite.min(), composite.max()
         plate_disc_score = (composite - composite_min) / (composite_max - composite_min) * 100
 
-        self.data = pd.concat([
-            self.data,
-            pd.Series(plate_disc_score, name='PlateDisciplineScore', index=self.data.index)
-        ], axis=1)
+        self.data['PlateDisciplineScore'] = plate_disc_score
 
     def filter_data(self) -> None:
         """Filter and reshape the data for batters.
